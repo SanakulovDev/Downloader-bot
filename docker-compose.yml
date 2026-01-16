@@ -1,0 +1,36 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: downloader_redis
+    restart: always
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    ports:
+      - "6390:6390"
+
+  downloader-bot:
+    build: .
+    container_name: ${CONTAINER_NAME}
+    restart: always
+    depends_on:
+      - redis
+    mem_limit: 2g
+    mem_reservation: 512m
+    volumes:
+      - ./app:/app/app
+      - /dev/shm:/dev/shm
+    env_file:
+      - ./app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    ulimits:
+      nofile:
+        soft: 100000  
+        hard: 100000
+
+volumes:
+  redis_data:
+ 
