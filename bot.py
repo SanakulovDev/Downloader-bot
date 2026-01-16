@@ -601,36 +601,38 @@ async def download_worker(worker_id: int):
 
 async def process_video_task(chat_id, url, message: Message):
     status_msg = await message.answer("⏳ <b>Navbat keldi, yuklab olinmoqda...</b>", parse_mode='HTML')
-    video_path = await download_video(url, chat_id)
-    
-    if video_path:
-        try:
+    video_path = None
+    try:
+        video_path = await download_video(url, chat_id)
+        if video_path:
             await message.answer_video(
                 FSInputFile(video_path),
                 caption="🤖 @qishloqlik_devbot"
             )
             await status_msg.delete()
+        else:
+            await status_msg.edit_text("❌ Video yuklab bo'lmadi.")
+    except Exception as e:
+        logger.error(f"Video task error: {e}")
+        await status_msg.edit_text("❌ Xatolik yuz berdi!")
+    finally:
+        if video_path and os.path.exists(video_path):
             try:
                 os.remove(video_path)
-            except:
-                pass
-        except Exception as e:
-            logger.error(f"Send video error: {e}")
-            await status_msg.edit_text("❌ Yuborishda xatolik yuz berdi!")
-    else:
-        await status_msg.edit_text("❌ Video yuklab bo'lmadi.")
+                logger.info(f"Deleted temp file: {video_path}")
+            except Exception as e:
+                logger.error(f"Error deleting file {video_path}: {e}")
 
 async def process_music_task(chat_id, video_id, callback: CallbackQuery):
     try:
-        # Edit message to show processing started
         await callback.message.edit_text("⏳ <b>Navbat keldi, yuklab olinmoqda...</b>", parse_mode='HTML')
     except:
         pass
 
-    audio_path, filename = await download_audio(video_id, chat_id)
-    
-    if audio_path:
-        try:
+    audio_path = None
+    try:
+        audio_path, filename = await download_audio(video_id, chat_id)
+        if audio_path:
             await callback.message.answer_audio(
                 FSInputFile(audio_path, filename=filename),
                 caption=f"🎵 {filename.replace('.m4a', '')} \n🤖 @qishloqlik_devbot",
@@ -640,16 +642,18 @@ async def process_music_task(chat_id, video_id, callback: CallbackQuery):
                 await callback.message.delete()
             except:
                 pass
-            
+        else:
+            await callback.message.edit_text("❌ Musiqa yuklashda xatolik bo'ldi.")
+    except Exception as e:
+        logger.error(f"Music task error: {e}")
+        await callback.message.answer("❌ Yuborishda xatolik yuz berdi!")
+    finally:
+        if audio_path and os.path.exists(audio_path):
             try:
                 os.remove(audio_path)
-            except:
-                pass
-        except Exception as e:
-            logger.error(f"Send audio error: {e}")
-            await callback.message.answer("❌ Yuborishda xatolik yuz berdi!")
-    else:
-        await callback.message.edit_text("❌ Musiqa yuklashda xatolik bo'ldi.")
+                logger.info(f"Deleted temp file: {audio_path}")
+            except Exception as e:
+                logger.error(f"Error deleting file {audio_path}: {e}")
 
 
 async def main():
