@@ -4,3 +4,5 @@
 ../handlers/states/__pycache__
 ../utils/db_api/models/__pycache__
 ../utils/db_api/database/__pycache__
+
+../downloads/broadcasts/*

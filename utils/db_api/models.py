@@ -14,3 +14,19 @@ class User(Base):
 
     def __repr__(self):
         return f"<User(id={self.id}, full_name='{self.full_name}')>"
+
+class Broadcast(Base):
+    __tablename__ = 'broadcasts'
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    message_text: Mapped[str] = mapped_column(String, nullable=True)
+    message_type: Mapped[str] = mapped_column(String, default="text") # text, photo, video, animation
+    file_id: Mapped[str] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="pending") # pending, processing, completed, failed
+    total_users: Mapped[int] = mapped_column(BigInteger, default=0)
+    sent_count: Mapped[int] = mapped_column(BigInteger, default=0)
+    failed_count: Mapped[int] = mapped_column(BigInteger, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<Broadcast(id={self.id}, status='{self.status}')>"

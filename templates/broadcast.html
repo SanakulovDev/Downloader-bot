@@ -1,26 +1,114 @@
-{% extends "layout.html" %} {% block content %}
+{% extends "sqladmin/layout.html" %} 
+{% block content %}
 <div class="col-12">
-  <div class="card">
-    <div class="card-header">
-      <h3 class="card-title">Broadcast Message</h3>
-    </div>
-    <div class="card-body">
-      <form method="POST">
-        <div class="form-group">
-          <label for="message">Message Text</label>
-          <textarea
-            class="form-control"
-            id="message"
-            name="message"
-            rows="5"
-            required
-          ></textarea>
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">New Broadcast</h3>
         </div>
-        <button type="submit" class="btn btn-primary mt-3">
-          Send to All Users
-        </button>
-      </form>
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                <div class="form-group mb-3">
+                    <label>Message Type</label>
+                    <select class="form-control" name="message_type" id="message_type" onchange="toggleFields()">
+                        <option value="text">Text Message</option>
+                        <option value="photo">Photo</option>
+                        <option value="video">Video</option>
+                        <option value="animation">GIF (Animation)</option>
+                    </select>
+                </div>
+
+                <div class="form-group mb-3" id="media_options" style="display:none;">
+                    <label>Media Source</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="media_source" id="source_link" value="link" checked onchange="toggleSource()">
+                        <label class="form-check-label" for="source_link">Link or File ID</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="media_source" id="source_upload" value="upload" onchange="toggleSource()">
+                        <label class="form-check-label" for="source_upload">Upload File</label>
+                    </div>
+                </div>
+
+                <div class="form-group mb-3" id="file_id_group" style="display:none;">
+                    <label>File ID or URL</label>
+                    <input type="text" class="form-control" name="file_id" placeholder="Agarda 'Text' bo'lmasa, file_id yoki URL kiriting">
+                </div>
+
+                <div class="form-group mb-3" id="file_upload_group" style="display:none;">
+                    <label>Upload File</label>
+                    <input type="file" class="form-control" name="file_upload">
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="message">Message Text / Caption</label>
+                    <textarea class="form-control" id="message" name="message" rows="5"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Start Broadcast</button>
+            </form>
+        </div>
     </div>
-  </div>
 </div>
+
+<div class="col-12 mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Broadcast History (Last 10)</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-vcenter text-nowrap">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Sent/Total</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in history %}
+                    <tr>
+                        <td>{{ item.id }}</td>
+                        <td>{{ item.message_type }}</td>
+                        <td>
+                            <span class="badge {% if item.status == 'completed' %}bg-success{% elif item.status == 'processing' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                {{ item.status }}
+                            </span>
+                        </td>
+                        <td>{{ item.sent_count }} / {{ item.total_users }}</td>
+                        <td>{{ item.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleFields() {
+    var type = document.getElementById("message_type").value;
+    var mediaOptions = document.getElementById("media_options");
+    
+    if (type !== 'text') {
+        mediaOptions.style.display = 'block';
+        toggleSource();
+    } else {
+        mediaOptions.style.display = 'none';
+        document.getElementById("file_id_group").style.display = 'none';
+        document.getElementById("file_upload_group").style.display = 'none';
+    }
+}
+
+function toggleSource() {
+    var source = document.querySelector('input[name="media_source"]:checked').value;
+    if (source === 'link') {
+        document.getElementById("file_id_group").style.display = 'block';
+        document.getElementById("file_upload_group").style.display = 'none';
+    } else {
+        document.getElementById("file_id_group").style.display = 'none';
+        document.getElementById("file_upload_group").style.display = 'block';
+    }
+}
+</script>
 {% endblock %}
