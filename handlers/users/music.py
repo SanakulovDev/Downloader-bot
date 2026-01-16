@@ -56,6 +56,54 @@ async def show_music_page(chat_id, results, page, message_to_edit: Message = Non
     else:
         await bot.send_message(chat_id, text, reply_markup=kb)
 
+@router.message(Command("my_favorite"))
+@router.message(Command("favorites"))
+async def cmd_my_favorite(message: Message):
+    """Sevimlilar ro'yxatini ko'rsatish"""
+    user_id = message.from_user.id
+    from loader import redis_client, bot
+    
+    if not redis_client:
+        await message.answer("❌ Kechirasiz, bu funksiya hozir ishlamayapti (Database offline).")
+        return
+
+    # Get all likes
+    likes = await redis_client.smembers(f"user:{user_id}:likes")
+    logger.info(f"Fetching likes for user {user_id}. Found: {len(likes) if likes else 0}")
+    
+    if not likes:
+        await message.answer("🤷‍♂️ Sizda hali sevimli musiqalar yo'q.")
+        return
+        
+    # Parse likes (id|title)
+    # Handle old format (just id) gracefully if any
+    keyboard = []
+    decoded_likes = []
+    
+    for item in likes:
+        try:
+            item_str = item.decode() if isinstance(item, bytes) else item
+            if '|' in item_str:
+                vid, title = item_str.split('|', 1)
+                decoded_likes.append({'id': vid, 'title': title})
+            else:
+                # Fallback for old data
+                decoded_likes.append({'id': item_str, 'title': "Unknown Song"})
+        except:
+            pass
+            
+    # Sort or just list? Let's list. limiting to 50 maybe?
+    for song in decoded_likes[:50]:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"🎵 {song['title']}",
+                callback_data=f"music:{song['id']}" # Reuse music download handler
+            )
+        ])
+        
+    kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    await message.answer("❤️ <b>Sizning sevimli musiqalaringiz:</b>", parse_mode='HTML', reply_markup=kb)
+
 @router.callback_query(F.data.startswith('like:'))
 async def handle_like(callback: CallbackQuery):
     """Like bosilganda"""
@@ -135,52 +183,3 @@ async def handle_music_callback(callback: CallbackQuery):
     await callback.message.edit_text(f"⏳ <b>Navbatga qo'shildi...</b>\nSizning navbatingiz: {position}", parse_mode='HTML')
     
     await DOWNLOAD_QUEUE.put(('music', callback.message.chat.id, video_id, callback))
-
-
-@router.message(Command("my_favorite"))
-@router.message(Command("favorites"))
-async def cmd_my_favorite(message: Message):
-    """Sevimlilar ro'yxatini ko'rsatish"""
-    user_id = message.from_user.id
-    from loader import redis_client, bot
-    
-    if not redis_client:
-        await message.answer("❌ Kechirasiz, bu funksiya hozir ishlamayapti (Database offline).")
-        return
-
-    # Get all likes
-    likes = await redis_client.smembers(f"user:{user_id}:likes")
-    logger.info(f"Fetching likes for user {user_id}. Found: {len(likes) if likes else 0}")
-    
-    if not likes:
-        await message.answer("🤷‍♂️ Sizda hali sevimli musiqalar yo'q.")
-        return
-        
-    # Parse likes (id|title)
-    # Handle old format (just id) gracefully if any
-    keyboard = []
-    decoded_likes = []
-    
-    for item in likes:
-        try:
-            item_str = item.decode() if isinstance(item, bytes) else item
-            if '|' in item_str:
-                vid, title = item_str.split('|', 1)
-                decoded_likes.append({'id': vid, 'title': title})
-            else:
-                # Fallback for old data
-                decoded_likes.append({'id': item_str, 'title': "Unknown Song"})
-        except:
-            pass
-            
-    # Sort or just list? Let's list. limiting to 50 maybe?
-    for song in decoded_likes[:50]:
-        keyboard.append([
-            InlineKeyboardButton(
-                text=f"🎵 {song['title']}",
-                callback_data=f"music:{song['id']}" # Reuse music download handler
-            )
-        ])
-        
-    kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
-    await message.answer("❤️ <b>Sizning sevimli musiqalaringiz:</b>", parse_mode='HTML', reply_markup=kb)
