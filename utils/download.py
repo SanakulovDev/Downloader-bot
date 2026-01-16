@@ -105,8 +105,9 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
             # Agar direct download ishlamasa, yt-dlp ga o'tamiz
             format_selector = 'best'
         elif is_youtube_url(url):
-            # YouTube uchun (ffmpeg bor, shuning uchun maksimal sifat)
-            format_selector = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+            # YouTube uchun (ffmpeg bor, shuning uchun maksimal sifat, lekin H264 compatibilty)
+            # bestvideo[ext=mp4][vcodec^=avc] -> H.264 formatini tanlash (qora ekran bo'lmasligi uchun)
+            format_selector = 'bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best'
         else:
             return None
         
@@ -123,6 +124,7 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
             'extract_flat': False,
             # Document sifatida yuboriladi, shuning uchun 2GB limit
             'max_filesize': 2 * 1024 * 1024 * 1024,  # 2GB
+            'merge_output_format': 'mp4', # Ensure merged output is mp4
         }
 
         # Download qilish

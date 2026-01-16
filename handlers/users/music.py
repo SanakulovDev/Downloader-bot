@@ -76,8 +76,9 @@ async def handle_like(callback: CallbackQuery):
             # Add to user's like set
             data = f"{video_id}|{title}"
             await redis_client.sadd(f"user:{user_id}:likes", data)
-        except:
-            pass
+            logger.info(f"Added like for user {user_id}: {data}")
+        except Exception as e:
+            logger.error(f"Redis add error: {e}")
             
     await callback.answer("❤️ Sevimlilarga qo'shildi!", show_alert=False)
     # Remove Like button to prevent spamming? Or keep it. Keeping it is fine.
@@ -149,6 +150,8 @@ async def cmd_my_favorite(message: Message):
 
     # Get all likes
     likes = await redis_client.smembers(f"user:{user_id}:likes")
+    logger.info(f"Fetching likes for user {user_id}. Found: {len(likes) if likes else 0}")
+    
     if not likes:
         await message.answer("🤷‍♂️ Sizda hali sevimli musiqalar yo'q.")
         return
