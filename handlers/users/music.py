@@ -20,13 +20,21 @@ async def show_music_page(chat_id, results, page, message_to_edit: Message = Non
     current_items = results[start:end]
     
     keyboard = []
-    for res in current_items:
-        keyboard.append([
-            InlineKeyboardButton(
-                text=f"🎵 {res['title']} ({res['channel']})",
-                callback_data=f"music:{res['id']}"
-            )
-        ])
+    row = []
+    for i, res in enumerate(current_items):
+        button = InlineKeyboardButton(
+            text=f"🎵 {res['title'][:30]}...", # Shorten title for 2 columns
+            callback_data=f"music:{res['id']}"
+        )
+        row.append(button)
+        # 2 columns per row
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    
+    # Add remaining
+    if row:
+        keyboard.append(row)
     
     # Pagination buttons
     nav_buttons = []
@@ -46,6 +54,25 @@ async def show_music_page(chat_id, results, page, message_to_edit: Message = Non
         await message_to_edit.edit_text(text, reply_markup=kb)
     else:
         await bot.send_message(chat_id, text, reply_markup=kb)
+
+@router.callback_query(F.data.startswith('like:'))
+async def handle_like(callback: CallbackQuery):
+    """Like bosilganda"""
+    video_id = callback.data.split(':')[1]
+    user_id = callback.from_user.id
+    
+    # Redis ga saqlash
+    # Use deferred import or get from loader if possible, for now just simple ack
+    from loader import redis_client
+    if redis_client:
+        try:
+            # Add to user's like set
+            await redis_client.sadd(f"user:{user_id}:likes", video_id)
+        except:
+            pass
+            
+    await callback.answer("❤️ Sevimlilarga qo'shildi!", show_alert=False)
+    # Buttonni o'zgartirish (optional, lekin qiyin inline message bo'lsa)
 
 @router.message(F.text == "🎵 Musiqa Qidirish")
 async def mode_music(message: Message, state: FSMContext):

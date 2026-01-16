@@ -46,10 +46,16 @@ async def process_music_task(chat_id, video_id, callback: CallbackQuery):
     try:
         audio_path, filename = await download_audio(video_id, chat_id)
         if audio_path:
+            # Like button
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❤️ Sevimlilarga qo'shish", callback_data=f"like:{video_id}")]
+            ])
+            
             await callback.message.answer_audio(
                 FSInputFile(audio_path, filename=filename),
                 caption=f"🎵 {filename.replace('.m4a', '')} \n🤖 @qishloqlik_devbot",
-                title=filename.replace('.m4a', '')
+                title=filename.replace('.m4a', ''),
+                reply_markup=keyboard
             )
             try:
                 await callback.message.delete()

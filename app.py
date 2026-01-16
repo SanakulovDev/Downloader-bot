@@ -5,6 +5,7 @@ from aiogram import Dispatcher
 
 from loader import bot, dp, REDIS_HOST, REDIS_PORT, redis_client
 from utils.queue_handler import start_workers
+from utils.set_bot_commands import set_default_commands
 
 # Import handlers
 from handlers.users import start, video, music, echo
@@ -16,6 +17,10 @@ logger = logging.getLogger(__name__)
 async def main():
     """Bot ni ishga tushirish"""
     logger.info("🚀 Bot ishga tushmoqda...")
+    
+    # Set default commands
+    await set_default_commands(bot)
+
     
     # Redis ni ulash (cache uchun)
     # We need to set the global redis_client in loader module
