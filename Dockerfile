@@ -18,8 +18,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Bot kodini ko'chirish
-COPY bot.py .
-COPY instagram_downloader.py .
+COPY . .
+
 # app/ papkasini yaratish (.env fayl docker-compose.yml orqali mount qilinadi)
 RUN mkdir -p ./app
 
@@ -27,5 +27,5 @@ RUN mkdir -p ./app
 RUN mkdir -p /dev/shm/tmp
 
 # Bot ni ishga tushirish
-CMD ["python", "bot.py"]
+CMD ["python", "app.py"]
 
