@@ -29,3 +29,7 @@ dp = Dispatcher(storage=storage)
 # but we can keep a reference here if needed, or better yet, attached to dp.
 # For now, let's keep it simple global
 redis_client = None
+
+# Database
+from utils.db_api.database import async_session
+db = async_session

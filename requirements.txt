@@ -3,4 +3,10 @@ yt-dlp>=2024.1.0
 python-dotenv>=1.0.0
 redis[hiredis]>=5.0.0
 shazamio>=0.5.0
+asyncpg
+sqlalchemy
+fastapi
+uvicorn
+sqladmin
+itsdangerous
 

@@ -3,15 +3,35 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 
-from loader import dp
+from loader import dp, db
 from states.bot_states import BotStates
 from keyboards.default_keyboards import main_menu
+from utils.db_api.models import User
+from sqlalchemy import select
 
 router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     """Start command"""
+    # Register User
+    try:
+        async with db() as session:
+            user_id = message.from_user.id
+            full_name = message.from_user.full_name
+            username = message.from_user.username
+            
+            result = await session.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                new_user = User(id=user_id, full_name=full_name, username=username)
+                session.add(new_user)
+                await session.commit()
+                # logger or print could be added here
+    except Exception as e:
+        print(f"Error registering user: {e}")
+
     await state.set_state(BotStates.waiting_for_mode)
     await message.answer(
         "👋 Salom! Men universal media botman.\n\n"

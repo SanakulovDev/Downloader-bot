@@ -6,9 +6,11 @@ from aiogram import Dispatcher
 from loader import bot, dp, REDIS_HOST, REDIS_PORT, redis_client
 from utils.queue_handler import start_workers
 from utils.set_bot_commands import set_default_commands
+from utils.db_api.database import engine
+from utils.db_api.models import Base
 
 # Import handlers
-from handlers.users import start, video, music, echo
+from handlers.users import start, video, music, echo, admin
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +22,14 @@ async def main():
     
     # Set default commands
     await set_default_commands(bot)
+
+    # Create Database Tables
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("✅ Database tables created")
+    except Exception as e:
+        logger.error(f"❌ Error creating database tables: {e}")
 
     
     # Redis ni ulash (cache uchun)
@@ -43,6 +53,7 @@ async def main():
     
     # Register Routers
     dp.include_router(start.router)
+    dp.include_router(admin.router)
     dp.include_router(video.router)
     dp.include_router(music.router)
     dp.include_router(echo.router)

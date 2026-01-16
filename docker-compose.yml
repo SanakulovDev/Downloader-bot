@@ -9,16 +9,43 @@ services:
     ports:
       - "6390:6390"
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: downloader_db
+    restart: always
+    env_file:
+      - ./app/.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  admin_panel:
+    build: .
+    container_name: downloader_admin
+    restart: always
+    command: uvicorn admin_panel:app --host 0.0.0.0 --port 8000
+    volumes:
+      - .:/app
+      - /dev/shm:/dev/shm
+    env_file:
+      - ./app/.env
+    ports:
+      - "23456:8000"
+    depends_on:
+      - postgres
+
   downloader-bot:
     build: .
     container_name: ${CONTAINER_NAME}
     restart: always
     depends_on:
       - redis
+      - postgres
     mem_limit: 2g
     mem_reservation: 512m
     volumes:
-      - ./app:/app/app
+      - .:/app
       - /dev/shm:/dev/shm
     env_file:
       - ./app/.env
@@ -33,4 +60,5 @@ services:
 
 volumes:
   redis_data:
+  postgres_data:
  
