@@ -1,6 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
+from aiogram.filters import Command
 import logging
 
 from loader import dp
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 async def show_music_page(chat_id, results, page, message_to_edit: Message = None):
     # This requires `bot` instance. We can import it from loader
     from loader import bot
-    ITEMS_PER_PAGE = 5
+    ITEMS_PER_PAGE = 10
     start = page * ITEMS_PER_PAGE
     end = start + ITEMS_PER_PAGE
     current_items = results[start:end]
@@ -61,20 +62,28 @@ async def handle_like(callback: CallbackQuery):
     video_id = callback.data.split(':')[1]
     user_id = callback.from_user.id
     
-    # Redis ga saqlash
-    # Use deferred import or get from loader if possible, for now just simple ack
+    # Extract title from audio or caption
+    title = "Unknown Song"
+    if callback.message.audio:
+        title = callback.message.audio.title or callback.message.caption or "Song"
+    elif callback.message.caption:
+        title = callback.message.caption.split('\n')[0].replace('🎵 ', '')
+    
+    # Redis ga saqlash: "id|title"
     from loader import redis_client
     if redis_client:
         try:
             # Add to user's like set
-            await redis_client.sadd(f"user:{user_id}:likes", video_id)
+            data = f"{video_id}|{title}"
+            await redis_client.sadd(f"user:{user_id}:likes", data)
         except:
             pass
             
     await callback.answer("❤️ Sevimlilarga qo'shildi!", show_alert=False)
-    # Buttonni o'zgartirish (optional, lekin qiyin inline message bo'lsa)
+    # Remove Like button to prevent spamming? Or keep it. Keeping it is fine.
 
 @router.message(F.text == "🎵 Musiqa Qidirish")
+@router.message(Command("music"))
 async def mode_music(message: Message, state: FSMContext):
     await state.set_state(BotStates.music_mode)
     await message.answer("🎵 <b>Musiqa rejimidasiz.</b>\n\nQo'shiq yoki artist nomini yozing:", parse_mode='HTML')
@@ -125,3 +134,50 @@ async def handle_music_callback(callback: CallbackQuery):
     await callback.message.edit_text(f"⏳ <b>Navbatga qo'shildi...</b>\nSizning navbatingiz: {position}", parse_mode='HTML')
     
     await DOWNLOAD_QUEUE.put(('music', callback.message.chat.id, video_id, callback))
+
+
+@router.message(Command("my_favorite"))
+@router.message(Command("favorites"))
+async def cmd_my_favorite(message: Message):
+    """Sevimlilar ro'yxatini ko'rsatish"""
+    user_id = message.from_user.id
+    from loader import redis_client, bot
+    
+    if not redis_client:
+        await message.answer("❌ Kechirasiz, bu funksiya hozir ishlamayapti (Database offline).")
+        return
+
+    # Get all likes
+    likes = await redis_client.smembers(f"user:{user_id}:likes")
+    if not likes:
+        await message.answer("🤷‍♂️ Sizda hali sevimli musiqalar yo'q.")
+        return
+        
+    # Parse likes (id|title)
+    # Handle old format (just id) gracefully if any
+    keyboard = []
+    decoded_likes = []
+    
+    for item in likes:
+        try:
+            item_str = item.decode() if isinstance(item, bytes) else item
+            if '|' in item_str:
+                vid, title = item_str.split('|', 1)
+                decoded_likes.append({'id': vid, 'title': title})
+            else:
+                # Fallback for old data
+                decoded_likes.append({'id': item_str, 'title': "Unknown Song"})
+        except:
+            pass
+            
+    # Sort or just list? Let's list. limiting to 50 maybe?
+    for song in decoded_likes[:50]:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"🎵 {song['title']}",
+                callback_data=f"music:{song['id']}" # Reuse music download handler
+            )
+        ])
+        
+    kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    await message.answer("❤️ <b>Sizning sevimli musiqalaringiz:</b>", parse_mode='HTML', reply_markup=kb)

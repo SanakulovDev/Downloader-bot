@@ -7,6 +7,7 @@ async def set_default_commands(bot: Bot):
         BotCommand(command="help", description="Yordam"),
         BotCommand(command="music", description="Musiqa qidirish"),
         BotCommand(command="video", description="Video yuklash"),
+        BotCommand(command="my_favorite", description="Sevimlilar ❤️"),
     ]
     await bot.set_my_commands(commands)
     

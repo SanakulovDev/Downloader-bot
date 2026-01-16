@@ -17,7 +17,10 @@ from utils.search import search_music
 logger = logging.getLogger(__name__)
 router = Router()
 
+from aiogram.filters import Command
+
 @router.message(F.text == "🎬 Video Yuklash")
+@router.message(Command("video"))
 async def mode_video(message: Message, state: FSMContext):
     await state.set_state(BotStates.video_mode)
     await message.answer("🎬 <b>Video rejimidasiz.</b>\n\nYouTube yoki Instagram link yuboring:", parse_mode='HTML')
