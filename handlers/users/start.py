@@ -14,27 +14,46 @@ router = Router()
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     """Start command"""
-    # Register User
     try:
         async with db() as session:
             user_id = message.from_user.id
-            full_name = message.from_user.full_name
-            username = message.from_user.username
-            
             result = await session.execute(select(User).where(User.id == user_id))
             user = result.scalar_one_or_none()
             
             if not user:
-                new_user = User(id=user_id, full_name=full_name, username=username)
-                session.add(new_user)
-                await session.commit()
-                # logger or print could be added here
+                await state.set_state(BotStates.waiting_for_name)
+                await message.answer("👋 Assalomu alaykum! Botdan foydalanish uchun ismingizni kiriting:")
+                return
     except Exception as e:
-        print(f"Error registering user: {e}")
+        print(f"Error checking user: {e}")
 
     await state.set_state(BotStates.waiting_for_mode)
     await message.answer(
         "👋 Salom! Men universal media botman.\n\n"
+        "Quyidagi bo'limlardan birini tanlang:",
+        reply_markup=main_menu
+    )
+
+@router.message(BotStates.waiting_for_name)
+async def process_name(message: Message, state: FSMContext):
+    """Handle name input"""
+    full_name = message.text
+    user_id = message.from_user.id
+    username = message.from_user.username
+
+    try:
+        async with db() as session:
+            new_user = User(id=user_id, full_name=full_name, username=username)
+            session.add(new_user)
+            await session.commit()
+    except Exception as e:
+        print(f"Error saving user: {e}")
+        await message.answer("Xatolik yuz berdi, iltimos qaytadan urinib ko'ring /start")
+        return
+
+    await state.set_state(BotStates.waiting_for_mode)
+    await message.answer(
+        f"Rahmat, {full_name}! Ro'yxatdan o'tdingiz.\n\n"
         "Quyidagi bo'limlardan birini tanlang:",
         reply_markup=main_menu
     )
