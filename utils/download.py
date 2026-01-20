@@ -13,25 +13,28 @@ logger = logging.getLogger(__name__)
 
 # --- YANGILANGAN SOZLAMALAR (IPv6) ---
 COMMON_OPTS = {
-    # 1. Sizning IPv6 manzilingiz (Rasmdan olindi)
-    'source_address': '2a02:c207:2303:3466:0000:0000:0000:0001',
+    # 1. source_address ni olib tashlaymiz (yoki kommentga olamiz).
+    # Sababi: Sizda ping6 ishladi, demak server o'zi yo'lni topadi.
+    # Qo'lda yozish ba'zan "Network is unreachable" xatosini berishi mumkin.
+    # 'source_address': '...', 
     
     # 2. IPv6 ni majburlash
     'force_ipv4': False, 
     'force_ipv6': True,
 
-    # 3. Android Client (qo'shimcha himoya)
+    # 3. MASKIROVKA: "iOS" (iPhone)
+    # Hozirda Androidga qaraganda iOS kamroq bloklanyapti.
     'extractor_args': {
         'youtube': {
-            'player_client': ['android', 'web'],
+            'player_client': ['ios'], 
         }
     },
     
-    # Xatoliklar oldini olish
+    # Qo'shimcha xavfsizlik
+    'nocheckcertificate': True,
     'quiet': True,
     'no_warnings': True,
     'ignoreerrors': True,
-    'nocheckcertificate': True,
     'http_chunk_size': 10485760,
 }
 # -------------------------------------
