@@ -13,30 +13,30 @@ logger = logging.getLogger(__name__)
 
 # --- YANGILANGAN SOZLAMALAR (IPv6) ---
 COMMON_OPTS = {
-    # 1. OAuth2 rejimini yoqish
-    'username': 'oauth2',
-    'password': '',
+    # 1. Cookies faylni QAYTARAMIZ
+    # (Login qilingan sessiya baribir ishonchliroq)
+    'cookiefile': '/app/cookies.txt',
     
-    # 2. IPv6 ni qoldiramiz (tezlik uchun)
+    # 2. IPv6 ni majburlash (IP blokni aylanib o'tish uchun)
     'force_ipv4': False, 
     'force_ipv6': True,
 
-    # 3. Loglarni ko'rish uchun (KODNI KO'RISH UCHUN SHART!)
-    'quiet': False, 
-    'no_warnings': False,
-    
-    # 4. Tokenni saqlash joyi (Docker o'chganda ketib qolmasligi uchun)
-    'cache_dir': '/app/.cache',
-
-    # 5. Oddiy Web klient (OAuth bilan shu yaxshi ishlaydi)
+    # 3. iOS Mijozi (Androiddan ko'ra ishonchliroq)
     'extractor_args': {
         'youtube': {
-            'player_client': ['web'],
+            'player_client': ['ios'],
         }
     },
     
-    'ignoreerrors': True,
+    # 4. OAuth ni O'CHIRAMIZ (Chunki u xato beryapti)
+    # 'username': 'oauth2', <-- KERAK EMAS
+    # 'password': '',       <-- KERAK EMAS
+    
+    # Qo'shimcha
     'nocheckcertificate': True,
+    'quiet': True,
+    'no_warnings': True,
+    'ignoreerrors': True,
     'http_chunk_size': 10485760,
 }
 # -------------------------------------
