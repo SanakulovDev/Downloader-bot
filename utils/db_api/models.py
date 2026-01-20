@@ -30,3 +30,14 @@ class Broadcast(Base):
 
     def __repr__(self):
         return f"<Broadcast(id={self.id}, status='{self.status}')>"
+
+class BroadcastMessage(Base):
+    __tablename__ = 'broadcast_messages'
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    broadcast_id: Mapped[int] = mapped_column(BigInteger) # FK logic handled manually or via simple column for now
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    message_id: Mapped[int] = mapped_column(BigInteger)
+
+    def __repr__(self):
+        return f"<BroadcastMessage(broadcast_id={self.broadcast_id}, message_id={self.message_id})>"

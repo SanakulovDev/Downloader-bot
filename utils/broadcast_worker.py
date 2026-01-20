@@ -1,11 +1,7 @@
-import asyncio
-from sqlalchemy import select, update
-from utils.db_api.database import async_session
-from utils.db_api.models import User, Broadcast
+from utils.db_api.models import User, Broadcast, BroadcastMessage
 from loader import bot
 import logging
-
-logger = logging.getLogger(__name__)
+import asyncio
 
 async def broadcast_worker(broadcast_id: int):
     """
@@ -44,14 +40,20 @@ async def broadcast_worker(broadcast_id: int):
                     if os.path.exists(media):
                         media = FSInputFile(media)
                 
+                msg = None
                 if broadcast.message_type == 'text':
-                    await bot.send_message(chat_id=user_id, text=broadcast.message_text)
+                    msg = await bot.send_message(chat_id=user_id, text=broadcast.message_text)
                 elif broadcast.message_type == 'photo':
-                     await bot.send_photo(chat_id=user_id, photo=media, caption=broadcast.message_text)
+                     msg = await bot.send_photo(chat_id=user_id, photo=media, caption=broadcast.message_text)
                 elif broadcast.message_type == 'video':
-                     await bot.send_video(chat_id=user_id, video=media, caption=broadcast.message_text)
+                     msg = await bot.send_video(chat_id=user_id, video=media, caption=broadcast.message_text)
                 elif broadcast.message_type == 'animation':
-                     await bot.send_animation(chat_id=user_id, animation=media, caption=broadcast.message_text)
+                     msg = await bot.send_animation(chat_id=user_id, animation=media, caption=broadcast.message_text)
+                
+                if msg:
+                    # Save message ID for future deletion
+                    bm = BroadcastMessage(broadcast_id=broadcast.id, user_id=user_id, message_id=msg.message_id)
+                    session.add(bm)
                 
                 sent += 1
             except Exception as e:
@@ -61,12 +63,9 @@ async def broadcast_worker(broadcast_id: int):
             # Rate limit
             await asyncio.sleep(0.05)
             
-            # Update stats periodically (e.g., every 10 users) or at end
-            if (sent + failed) % 10 == 0:
-                 # Re-fetch is problematic in long loop with same session usually, 
-                 # simpler to use a separate update query or commit periodically.
-                 # For safety/simplicity in this MVP, we create a new session or execute direct update
-                 pass
+            # Commit periodically
+            if (sent + failed) % 20 == 0:
+                 await session.commit()
 
         # Final update
         broadcast.sent_count = sent
@@ -74,3 +73,28 @@ async def broadcast_worker(broadcast_id: int):
         broadcast.status = "completed"
         await session.commit()
         logger.info(f"Broadcast {broadcast_id} finished. Sent: {sent}, Failed: {failed}")
+
+async def delete_broadcast_worker(broadcast_id: int):
+    """
+    Background task to delete broadcast messages.
+    """
+    logger.info(f"Deleting broadcast {broadcast_id}")
+    
+    async with async_session() as session:
+        # Fetch all messages for this broadcast
+        result = await session.execute(select(BroadcastMessage).where(BroadcastMessage.broadcast_id == broadcast_id))
+        messages = result.scalars().all()
+        
+        deleted_count = 0
+        
+        for bm in messages:
+            try:
+                await bot.delete_message(chat_id=bm.user_id, message_id=bm.message_id)
+                deleted_count += 1
+            except Exception as e:
+                # Message might be too old or user blocked bot
+                pass
+            
+            await asyncio.sleep(0.03) # Rate limit for deletion
+            
+        logger.info(f"Deleted {deleted_count} messages for broadcast {broadcast_id}")

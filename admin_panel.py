@@ -15,7 +15,7 @@ async def index():
 class UserAdmin(ModelView, model=User):
     column_list = [User.id, User.full_name, User.username, User.joined_at]
     can_create = False
-    can_edit = False
+    can_edit = True
     can_delete = True
     name = "User"
     name_plural = "Users"
@@ -84,7 +84,16 @@ class BroadcastView(BaseView):
                 broadcast_id = new_broadcast.id
 
             # Start Background Task
-            asyncio.create_task(broadcast_worker(broadcast_id))
+            task = asyncio.create_task(broadcast_worker(broadcast_id))
+            def handle_task_result(task: asyncio.Task):
+                try:
+                    task.result()
+                except asyncio.CancelledError:
+                    pass  # Task cancellation should not be treated as an error.
+                except Exception as e:
+                    import logging
+                    logging.getLogger("admin_panel").error(f"Broadcast task failed: {e}")
+            task.add_done_callback(handle_task_result)
             
             return await self.templates.TemplateResponse(request, "broadcast_result.html", 
                                                       {"message": f"Broadcast {broadcast_id} started!"})
@@ -97,5 +106,16 @@ class BroadcastView(BaseView):
             history = result.scalars().all()
 
         return await self.templates.TemplateResponse(request, "broadcast.html", {"history": history})
+
+    @expose("/broadcast/delete/{broadcast_id}", methods=["POST"])
+    async def delete_broadcast(self, request: Request):
+        try:
+            broadcast_id = int(request.path_params["broadcast_id"])
+            from utils.broadcast_worker import delete_broadcast_worker
+            asyncio.create_task(delete_broadcast_worker(broadcast_id))
+            return RedirectResponse(url="/admin/broadcast", status_code=303)
+        except Exception as e:
+             # In a real app we'd flash a message
+            return RedirectResponse(url="/admin/broadcast", status_code=303)
 
 admin.add_view(BroadcastView)
