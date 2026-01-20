@@ -1,5 +1,7 @@
 FROM python:3.11-slim
 
+COPY --from=denoland/deno:bin /deno /usr/bin/deno
+
 # Sistem paketlarini o'rnatish
 RUN apt-get update && apt-get install -y \
     ffmpeg \
@@ -19,6 +21,7 @@ WORKDIR /app
 # Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
 
 # Bot kodini ko'chirish
 COPY . .
