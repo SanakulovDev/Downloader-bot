@@ -42,8 +42,8 @@ async def handle_recognize_music(callback: CallbackQuery):
             'quiet': True,
             'max_filesize': 10 * 1024 * 1024, # 10MB yetadi
             # 'cookiefile': '/app/app/cookies.txt',
-            'username': 'sanakulov',                # <-- Mana shu yangi usul
-            'password': 'sanakulov123',
+           'username': os.getenv('YT_USERNAME', 'oauth2'), 
+           'password': os.getenv('YT_PASSWORD', ''),
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

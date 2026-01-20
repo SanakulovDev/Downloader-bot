@@ -46,8 +46,8 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         # Speed optimizations
         'concurrent_fragment_downloads': 5,
         'http_chunk_size': 10485760, # 10MB
-        'username': 'sanakulov',                # <-- Mana shu yangi usul
-        'password': 'sanakulov123',
+        'username': os.getenv('YT_USERNAME', 'oauth2'), 
+    'password': os.getenv('YT_PASSWORD', ''),
     }
     
     try:

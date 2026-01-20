@@ -25,8 +25,8 @@ async def search_music(query: str):
         # 'cookiefile': '/app/app/cookies.txt',
         'extract_flat': 'in_playlist', # Only extract flat for playlists
         'noplaylist': True,
-        'username': 'sanakulov',                # <-- Mana shu yangi usul
-        'password': 'sanakulov123',
+        'username': os.getenv('YT_USERNAME', 'oauth2'), 
+        'password': os.getenv('YT_PASSWORD', ''),
     }
     
     try:
