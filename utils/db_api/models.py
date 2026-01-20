@@ -41,3 +41,19 @@ class BroadcastMessage(Base):
 
     def __repr__(self):
         return f"<BroadcastMessage(broadcast_id={self.broadcast_id}, message_id={self.message_id})>"
+
+class SupportTicket(Base):
+    __tablename__ = 'support_tickets'
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    message: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="open") # open, closed, resolved
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    
+    # Reply fields
+    admin_reply: Mapped[str] = mapped_column(String, nullable=True)
+    replied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self):
+        return f"<SupportTicket(id={self.id}, user_id={self.user_id})>"

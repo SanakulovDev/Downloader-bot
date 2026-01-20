@@ -1,0 +1,77 @@
+{% extends "sqladmin/layout.html" %} 
+{% block content %}
+<div class="col-12">
+    <style>
+        .ticket-card {
+            margin-bottom: 20px;
+            transition: all 0.2s;
+        }
+        .ticket-card:hover {
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .status-open { color: #f59f00; font-weight: bold; }
+        .status-resolved { color: #2fb344; font-weight: bold; }
+        .reply-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+    </style>
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">📨 Support Inbox</h3>
+        </div>
+        <div class="card-body">
+            <div class="row row-cards">
+                {% for ticket in tickets %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="card ticket-card">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                {% if ticket.status == 'open' %}
+                                <span class="status-open">● Open</span>
+                                {% else %}
+                                <span class="status-resolved">● Resolved</span>
+                                {% endif %}
+                                #{{ ticket.id }} 
+                            </h3>
+                            <div class="card-actions">
+                                <small>{{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <span class="bg-blue-lt avatar avatar-xs rounded">ID</span> 
+                                <b>{{ ticket.user_id }}</b>
+                            </div>
+                            <div class="markdown text-muted">
+                                {{ ticket.message }}
+                            </div>
+                            
+                            {% if ticket.admin_reply %}
+                            <div class="reply-box mt-3">
+                                <strong>✅ Admin Reply:</strong><br>
+                                {{ ticket.admin_reply }}
+                                <br>
+                                <small class="text-muted">{{ ticket.replied_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            </div>
+                            {% else %}
+                            <div class="mt-3">
+                                <form action="/admin/support_admin/reply/{{ ticket.id }}" method="post">
+                                    <div class="mb-2">
+                                        <textarea class="form-control" name="reply_text" rows="3" placeholder="Type reply here..." required></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100">Send Reply</button>
+                                </form>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -10,7 +10,7 @@ from utils.db_api.database import engine
 from utils.db_api.models import Base
 
 # Import handlers
-from handlers.users import start, video, music, echo, admin, main_handler
+from handlers.users import start, video, music, echo, admin, main_handler, help
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -56,6 +56,7 @@ async def main():
     dp.include_router(admin.router)
     dp.include_router(video.router)
     dp.include_router(music.router)
+    dp.include_router(help.router)
     dp.include_router(main_handler.router)
     # echo router is no longer needed as main_handler catches all text
     # dp.include_router(echo.router)

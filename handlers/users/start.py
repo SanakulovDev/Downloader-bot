@@ -65,13 +65,4 @@ async def process_name(message: Message, state: FSMContext):
         parse_mode='HTML'
     )
 
-@router.message(Command("help"))
-async def cmd_help(message: Message):
-    """Help command"""
-    await message.answer(
-        "📖 Bot haqida ma'lumot:\n\n"
-        "1️⃣ <b>Video yuklash:</b> Link yuboring\n"
-        "2️⃣ <b>Musiqa:</b> Qo'shiq nomini yozing (masalan: 'Believer')\n\n"
-        "⚡ Bot juda tez ishlaydi!",
-        parse_mode='HTML'
-    )
+

@@ -40,7 +40,7 @@ async def search_music(query: str):
                     if entry is None:
                         continue
                         
-                    duration = entry.get('duration', 0)
+                    duration = entry.get('duration') or 0
                     # Filter: 1 min (60s) <= duration <= 5 min (300s)
                     if 60 <= duration <= 300:
                         results.append({

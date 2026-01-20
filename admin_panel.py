@@ -222,3 +222,128 @@ class BroadcastView(BaseView):
             return RedirectResponse(url="/admin/broadcast", status_code=303)
 
 admin.add_view(BroadcastView)
+
+# --- Support Mini App Endpoints ---
+from utils.db_api.models import SupportTicket
+
+@app.get("/support")
+async def support_page(request: Request):
+    from starlette.templating import Jinja2Templates
+    templates = Jinja2Templates(directory="templates")
+    return templates.TemplateResponse(request=request, name="support.html")
+
+from pydantic import BaseModel
+
+class SupportRequest(BaseModel):
+    user_id: int
+    username: str | None = None
+    fullname: str | None = None
+    message: str
+    initData: str | None = None
+
+@app.post("/support/submit")
+async def submit_support(data: SupportRequest):
+    try:
+        # 1. Save to DB
+        from utils.db_api.database import async_session
+        async with async_session() as session:
+            ticket = SupportTicket(
+                user_id=data.user_id,
+                message=data.message,
+                status="open"
+            )
+            session.add(ticket)
+            await session.commit()
+            
+        # 2. Notify Admin
+        import os
+        admins_str = os.getenv("ADMINS", "")
+        # Handle "id, id" or "id,id" formats
+        admins = [a.strip() for a in admins_str.split(",") if a.strip()]
+        
+        if admins:
+            from loader import bot
+            text = (
+                f"📨 <b>Yangi Murojaat!</b>\n\n"
+                f"👤 <b>User:</b> {data.fullname} (@{data.username})\n"
+                f"🆔 <b>ID:</b> <code>{data.user_id}</code>\n\n"
+                f"📝 <b>Xabar:</b>\n{data.message}"
+            )
+            for admin_id in admins:
+                try:
+                    await bot.send_message(chat_id=int(admin_id), text=text, parse_mode="HTML")
+                except Exception as e:
+                    print(f"Failed to send support msg to {admin_id}: {e}")
+                    pass
+                    
+        return {"status": "ok"}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "message": str(e)}
+
+# --- Support Admin Dashboard ---
+class SupportView(BaseView):
+    name = "Support"
+    icon = "fa-solid fa-envelope"
+    identity = "support_admin"
+
+    @expose("/", methods=["GET"])
+    async def support_dashboard(self, request: Request):
+        from starlette.templating import Jinja2Templates
+        from sqlalchemy import select, desc
+        from utils.db_api.database import async_session
+        
+        # templates = Jinja2Templates(directory="templates") # BaseView has self.templates
+        
+        async with async_session() as session:
+            result = await session.execute(
+                select(SupportTicket).order_by(
+                    # Open tickets first, then by date desc
+                    desc(SupportTicket.status == 'open'),
+                    desc(SupportTicket.created_at)
+                ).limit(50)
+            )
+            tickets = result.scalars().all()
+            
+        return await self.templates.TemplateResponse(request, "admin_support.html", context={"tickets": tickets})
+
+    @expose("/reply/{ticket_id}", methods=["POST"])
+    async def support_reply(self, request: Request):
+        ticket_id = int(request.path_params["ticket_id"])
+        form = await request.form()
+        reply_text = form.get("reply_text")
+        
+        if not reply_text:
+            return RedirectResponse(url="/admin/support_admin/", status_code=303)
+            
+        from utils.db_api.database import async_session
+        from sqlalchemy import select, func
+        from loader import bot
+        
+        async with async_session() as session:
+            result = await session.execute(select(SupportTicket).where(SupportTicket.id == ticket_id))
+            ticket = result.scalar_one_or_none()
+            
+            if ticket and ticket.status == 'open':
+                # 1. Send to User
+                try:
+                    await bot.send_message(
+                        chat_id=ticket.user_id,
+                        text=f"📨 <b>Admin javobi:</b>\n\n{reply_text}",
+                        parse_mode="HTML"
+                    )
+                    
+                    # 2. Update DB
+                    ticket.admin_reply = reply_text
+                    ticket.replied_at = func.now()
+                    ticket.status = "resolved"
+                    await session.commit()
+                    
+                except Exception as e:
+                    import logging
+                    logging.error(f"Failed to send reply to {ticket.user_id}: {e}")
+                    
+        return RedirectResponse(url="/admin/support_admin/", status_code=303)
+
+admin.add_view(SupportView)

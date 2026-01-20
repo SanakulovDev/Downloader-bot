@@ -6,7 +6,9 @@ RUN apt-get update && apt-get install -y \
     aria2 \
     curl \
     nodejs \
-    && rm -rf /var/lib/apt/lists/*
+    npm \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/bin/nodejs /usr/bin/node || true
 
 # FFmpeg multi-thread enable
 ENV OMP_NUM_THREADS=4
