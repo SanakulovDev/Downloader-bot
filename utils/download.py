@@ -35,7 +35,7 @@ COMMON_OPTS = {
 }
 
 async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Optional[str]]:
-    """Music yuklab olish - MP3 (ENG UNIVERSAL USUL)"""
+    """Music yuklab olish - MP3 (ENG SODDA VA ISHONCHLI)"""
     url = f"https://www.youtube.com/watch?v={video_id}"
     final_path = Path(TMP_DIR) / f"{video_id}.mp3"
     
@@ -45,15 +45,15 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     ydl_opts = {
         **COMMON_OPTS,
         
-        # --- "ATOM BOMBASI" FORMATI (Hech qachon xato bermaydi) ---
-        # 1. bestaudio: Toza audio qidir.
-        # 2. bestvideo+bestaudio: Agar yo'q bo'lsa, video+audio ol.
-        # 3. best: Agar u ham bo'lmasa, shunchaki borini ol.
-        'format': 'bestaudio/bestvideo+bestaudio/best',
+        # --- O'ZGARISH ---
+        # Biz "bestaudio" deb qidirmaymiz. 
+        # Shunchaki "best" deymiz. Bu Youtube-da bor eng yaxshi faylni (Video+Audio) tortadi.
+        # Bu 100% ishlaydi, chunki "best" har doim mavjud.
+        'format': 'best',
         
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
         
-        # Nima yuklansa ham baribir MP3 ga aylantirib beradi
+        # Baribir MP3 qilib beradi
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -65,7 +65,9 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     author = "Unknown"
 
     try:
-        logger.info(f"Downloading Audio (Aggressive): {url}")
+        # Logga yozib qo'yamiz, nima bo'layotganini ko'rish uchun
+        logger.info(f"Downloading Audio (Format: BEST): {url}")
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, url, download=True)
             if info:
@@ -74,7 +76,6 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
             
         clean_title = f"{title} - {author}".replace('/', '-').replace('\\', '-')
         
-        # Yakuniy MP3 faylni tekshiramiz
         if final_path.exists() and final_path.stat().st_size > 0:
             return str(final_path), f"{clean_title}.mp3"
             
@@ -82,7 +83,6 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         logger.error(f"Audio download error: {e}")
         
     return None, None
-
 
 async def download_video(url: str, chat_id: int) -> Optional[str]:
     """Video yuklab olish"""
