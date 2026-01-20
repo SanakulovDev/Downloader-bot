@@ -1,5 +1,3 @@
-# utils/download.py
-
 import asyncio
 import os
 import hashlib
@@ -13,24 +11,28 @@ from utils.validation import is_instagram_url, is_youtube_url
 
 logger = logging.getLogger(__name__)
 
-# --- YANGILANGAN SOZLAMALAR ---
+# --- ENG BARQAROR "WEB" SOZLAMALARI ---
 COMMON_OPTS = {
-    # 1. Cookie fayli (Serverda bor)
+    # 1. Cookie fayli (Web brauzerdan olingan)
     'cookiefile': '/app/cookies.txt',
     
-    # 2. IPv6 majburiy
+    # 2. IPv6 (Server uchun toza yo'l)
     'force_ipv4': False, 
     'force_ipv6': True,
 
-    # 3. MIJOZLAR HUJUMI (YANGI)
-    # Biz bitta klientga yopishib olmaymiz.
-    # yt-dlp ga aytamiz: "Android, iOS va Web - hammasini birma-bir tekshirib ko'r".
-    # Qaysi biri format bersa, o'shani ishlatamiz.
+    # 3. FQAT WEB MIJOZ (MUHIM!)
+    # Aralash mijozlar (android/ios) Web cookie bilan ishlaganda xato beradi.
+    # Shuning uchun faqat 'web' ishlatamiz.
     'extractor_args': {
         'youtube': {
-            'player_client': ['android', 'ios', 'web'],
+            'player_client': ['web'],
         }
     },
+
+    # 4. USER AGENT (YANGI)
+    # Biz o'zimizni haqiqiy Chrome brauzeri deb tanishtiramiz.
+    # Bu Cookie bilan 100% mos tushishini ta'minlaydi.
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     
     'quiet': True,
     'no_warnings': True,
@@ -40,7 +42,7 @@ COMMON_OPTS = {
 }
 
 async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Optional[str]]:
-    """Music yuklab olish - MP3 (ENG UNIVERSAL FORMAT)"""
+    """Music yuklab olish - MP3"""
     url = f"https://www.youtube.com/watch?v={video_id}"
     final_path = Path(TMP_DIR) / f"{video_id}.mp3"
     
@@ -50,14 +52,14 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     ydl_opts = {
         **COMMON_OPTS,
         
-        # --- "O'Q O'TMAS" FORMAT ---
-        # Biz "bestaudio" deb qidirmaymiz (chunki ba'zi klientlarda audio stream yashiringan bo'lishi mumkin).
-        # Shunchaki "best" deymiz. Bu har doim ishlaydi (bitta fayl tortadi).
+        # Format: "best"
+        # Bu eng xavfsiz variant. Video bo'lsa ham, audio bo'lsa ham,
+        # Youtube nima bersa o'shani olamiz. Tanlash yo'q.
         'format': 'best',
         
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
         
-        # Baribir MP3 qilib beradi
+        # Baribir MP3 ga aylantiramiz
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -69,7 +71,7 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     author = "Unknown"
 
     try:
-        logger.info(f"Downloading Audio (Clients: Android/iOS/Web, Format: BEST): {url}")
+        logger.info(f"Downloading Audio (Strict Web Mode): {url}")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, url, download=True)
@@ -87,16 +89,14 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         
     return None, None
 
-# download_video funksiyasi o'zgarishsiz qolishi mumkin yoki unga ham 'format': 'best' berishingiz mumkin.
-# Agar video yuklashda muammo bo'lmasa, uni tegmay turing.
+
 async def download_video(url: str, chat_id: int) -> Optional[str]:
-    # ... (Eski kodni qoldiring, faqat COMMON_OPTS yangilangani yetarli)
+    """Video yuklab olish"""
     temp_file = None
     try:
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
         temp_file = Path(TMP_DIR) / f"{url_hash}_{chat_id}.mp4"
         
-        # Redis cache
         if redis_client:
             try:
                 cache_key = f"video:{url_hash}"
@@ -108,7 +108,6 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
             except:
                 pass
         
-        # Instagram
         if is_instagram_url(url):
             result = await download_instagram_direct(url, temp_file)
             if result and os.path.exists(result):
@@ -117,8 +116,9 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
         # YOUTUBE
         ydl_opts = {
             **COMMON_OPTS,
-            # Videoga ham 'best' ishlatsak xato kamayadi
-            'format': 'best/bestvideo+bestaudio',
+            # Videoga ham oddiy 'best' beramiz. 
+            # Injiqlik qilib alohida video+audio so'rasak, Youtube bermay qo'yishi mumkin.
+            'format': 'best',
             'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
             'max_filesize': 2 * 1024 * 1024 * 1024,
@@ -128,7 +128,6 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             await asyncio.to_thread(ydl.download, [url])
 
-        # ... (faylni topish va redisga saqlash qismi o'zgarishsiz)
         downloaded_file = None
         if temp_file.exists():
              downloaded_file = temp_file
