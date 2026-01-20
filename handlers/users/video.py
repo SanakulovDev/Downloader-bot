@@ -17,66 +17,71 @@ from utils.search import search_music
 logger = logging.getLogger(__name__)
 router = Router()
 
-from aiogram.filters import Command
-
-# mode_video function removed
-
-
 @router.callback_query(F.data.startswith('recognize_music:'))
 async def handle_recognize_music(callback: CallbackQuery):
     """Videodagi musiqani aniqlash va variantlarni ko'rsatish"""
     video_id = callback.data.split(':')[1]
+    
+    # Userga javob qaytarish (loading...)
     await callback.answer("⏳ Musiqa aniqlanmoqda...", show_alert=False)
+    status_msg = await callback.message.answer("🔍 Audio qismi yuklanmoqda... 0%")
     
-    status_msg = await callback.message.answer("🔍 Musiqa aniqlanmoqda... Biroz kuting.")
+    # Biz yakuniy fayl .mp3 bo'lishini kutyapmiz
+    temp_audio = Path(TMP_DIR) / f"recog_{video_id}.mp3"
     
-    temp_audio = None
     try:
-        # 1. Audio ni yuklab olish (Recognition uchun)
-        temp_audio = Path(TMP_DIR) / f"recog_{video_id}.m4a"
+        # 1. Audio ni yuklab olish (Cookiesiz, Android Client bilan)
         url = f"https://www.youtube.com/watch?v={video_id}"
         
         ydl_opts = {
             'format': 'bestaudio/best',
-            'outtmpl': str(temp_file),
+            # Fayl nomini shablon orqali beramiz, yt-dlp o'zi .mp3 qiladi
+            'outtmpl': str(Path(TMP_DIR) / f"recog_{video_id}.%(ext)s"),
             
-            # Cookie turaversin, lekin Android klient bilan u yaxshiroq ishlashi mumkin
-            'cookiefile': '/app/cookies.txt',
-            
-            # --- ENG MUHIM O'ZGARISH ---
-            # Biz o'zimizni "Android" (Samsung/Pixel) telefoni deb tanitamiz.
-            # Bu datacenter (server) IP bloklarini aylanib o'tishga yordam beradi.
+            # --- IP BLOKNI AYLANIB O'TISH ---
+            # Cookie ISHLATMAYMIZ (IP mojarosi bo'lmasligi uchun)
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
+                    'player_client': ['android', 'ios'],
                 }
             },
-            # ---------------------------
-
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            },
+            # --------------------------------
+            
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,
             'nocheckcertificate': True,
             
-            # MP3 ga o'tkazish
+            # Majburan MP3 ga o'tkazish (Shazam uchun qulay)
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
-            
-            'concurrent_fragment_downloads': 5,
-            'http_chunk_size': 10485760,
         }
+        
+        await status_msg.edit_text("🔍 Audio yuklanmoqda... (Youtube)")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             await asyncio.to_thread(ydl.download, [url])
             
         if not temp_audio.exists():
-            await status_msg.edit_text("❌ Audio yuklab bo'lmadi.")
-            return
+            # Ba'zan yt-dlp formatni o'zgartirib yuborishi mumkin, tekshiramiz
+            found = False
+            for f in Path(TMP_DIR).glob(f"recog_{video_id}.*"):
+                if f.exists():
+                    temp_audio = f
+                    found = True
+                    break
+            if not found:
+                await status_msg.edit_text("❌ Audio yuklab bo'lmadi (Youtube blokladi).")
+                return
 
         # 2. Shazam orqali aniqlash
+        await status_msg.edit_text("🎧 Shazam orqali eshitilmoqda...")
         shazam = Shazam()
         out = await shazam.recognize(str(temp_audio))
         
@@ -85,63 +90,59 @@ async def handle_recognize_music(callback: CallbackQuery):
         subtitle = track.get('subtitle')
         
         if not title:
-            await status_msg.edit_text("❌ Musiqa aniqlanmadi.")
+            await status_msg.edit_text("❌ Afsuski, bu musiqani aniqlab bo'lmadi.")
             return
             
         search_query = f"{title} {subtitle}"
-        await status_msg.edit_text(f"✅ Topildi: <b>{search_query}</b>\n\n🔍 Variantlar qidirilmoqda...", parse_mode='HTML')
+        await status_msg.edit_text(f"✅ Topildi: <b>{search_query}</b>\n\n🔍 Botdan qidirilmoqda...", parse_mode='HTML')
         
-        # 3. YouTube dan variantlarni qidirish
+        # 3. YouTube dan variantlarni qidirish (Bot ichidan yuklab berish uchun)
         results = await search_music(search_query)
         
         if not results:
-            await status_msg.edit_text(f"❌ '{search_query}' bo'yicha hech narsa topilmadi.")
+            await status_msg.edit_text(f"❌ '{search_query}' Shazamda topildi, lekin Youtubedan topa olmadim.")
             return
 
         # 4. Variantlarni ko'rsatish
         keyboard = []
-        for res in results:
+        for res in results[:5]: # Maksimum 5 ta variant
             keyboard.append([
                 InlineKeyboardButton(
-                    text=f"⬇️ {res['title']} ({res['channel']})",
-                    callback_data=f"music:{res['id']}" # Bu eski music handlerga tushadi va yuklab beradi
+                    text=f"⬇️ {res['title'][:30]}...",
+                    callback_data=f"music:{res['id']}" 
                 )
             ])
         
         kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
         await status_msg.edit_text(
-            f"🎵 <b>'{search_query}'</b> bo'yicha natijalar:\nYuklab olish uchun tanlang:",
+            f"🎵 <b>'{search_query}'</b>\n\nQaysi birini yuklab beray?",
             parse_mode='HTML',
             reply_markup=kb
         )
 
     except Exception as e:
         logger.error(f"Recognition error: {e}", exc_info=True)
-        await status_msg.edit_text("❌ Xatolik yuz berdi.")
+        await status_msg.edit_text("❌ Tizimda xatolik yuz berdi.")
         
     finally:
+        # Faylni tozalash
         if temp_audio and temp_audio.exists():
             try:
                 temp_audio.unlink()
             except:
                 pass
 
-
-# Legacy state handler removed
-
-
-
 async def handle_video_logic(message: Message, url: str):
     """
-    Main Logic that processes a video URL.
-    Can be called from main_handler or any other place.
+    Asosiy Video yuklash logikasi (Navbatga qo'shadi)
     """
     chat_id = message.chat.id
     
-    status_msg = await message.answer(f"🎬 Yuklab olinmoqda: <b>{url}</b>", parse_mode='HTML')
+    status_msg = await message.answer(f"🎬 So'rov qabul qilindi...", parse_mode='HTML')
     
     # Queue ga qo'shish
     position = DOWNLOAD_QUEUE.qsize() + 1
-    await status_msg.edit_text(f"⏳ <b>Navbatga qo'shildi...</b>\nSizning navbatingiz: {position}", parse_mode='HTML')
+    await status_msg.edit_text(f"⏳ <b>Navbatga qo'shildi!</b>\nSizning o'rningiz: {position}", parse_mode='HTML')
     
+    # Queue handler o'zi `utils/download.py` dagi funksiyani chaqiradi
     await DOWNLOAD_QUEUE.put(('video', chat_id, url, message))

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Umumiy sozlamalar (Audio va Video uchun ham kerak)
 COMMON_OPTS = {
-    'cookiefile': '/app/cookies.txt',  # Docker ichidagi manzil
+    # 'cookiefile': '/app/cookies.txt',  # Docker ichidagi manzil
     'extractor_args': {
         'youtube': {
             'player_client': ['android', 'web'], # Bloklarni aylanib o'tish kaliti
