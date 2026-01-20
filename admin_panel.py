@@ -8,6 +8,11 @@ from utils.db_api.models import User
 
 app = FastAPI()
 
+from starlette.middleware.sessions import SessionMiddleware
+import os
+SECRET_KEY = os.getenv("SECRET_KEY", "unsafe_secret_key")
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
 @app.get("/")
 async def index():
     return RedirectResponse(url="/admin")
@@ -21,7 +26,36 @@ class UserAdmin(ModelView, model=User):
     name_plural = "Users"
     icon = "fa-solid fa-user"
 
-admin = Admin(app, engine, templates_dir="templates")
+from sqladmin.authentication import AuthenticationBackend
+from starlette.requests import Request
+from starlette.responses import RedirectResponse
+
+class AdminAuth(AuthenticationBackend):
+    async def login(self, request: Request) -> bool:
+        form = await request.form()
+        username = form.get("username")
+        password = form.get("password")
+
+        # Basic check against ENV
+        if username == os.getenv("ADMIN_USERNAME", "admin") and password == os.getenv("ADMIN_PASSWORD", "admin"):
+            request.session.update({"token": "valid_token_placeholder"}) # In real JWT, we'd sign a token here
+            return True
+        return False
+
+    async def logout(self, request: Request) -> bool:
+        request.session.clear()
+        return True
+
+    async def authenticate(self, request: Request) -> bool:
+        token = request.session.get("token")
+        if not token:
+            return False
+        # Optional: Verify token validity if it were a real JWT
+        return True
+
+authentication_backend = AdminAuth(secret_key=SECRET_KEY)
+
+admin = Admin(app, engine, templates_dir="templates", authentication_backend=authentication_backend)
 admin.add_view(UserAdmin)
 
 from sqladmin import BaseView, expose
