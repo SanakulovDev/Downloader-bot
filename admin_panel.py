@@ -107,6 +107,81 @@ class BroadcastView(BaseView):
 
         return await self.templates.TemplateResponse(request, "broadcast.html", {"history": history})
 
+    @expose("/broadcast/resend/{broadcast_id}", methods=["POST"])
+    async def resend_broadcast(self, request: Request):
+        try:
+            broadcast_id = int(request.path_params["broadcast_id"])
+            from utils.db_api.database import async_session
+            from sqlalchemy import select
+            
+            async with async_session() as session:
+                # Fetch original
+                result = await session.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
+                original = result.scalar_one_or_none()
+                
+                if original:
+                    # Create copy
+                    new_broadcast = Broadcast(
+                        message_text=original.message_text,
+                        message_type=original.message_type,
+                        file_id=original.file_id,
+                        status="processing"
+                    )
+                    session.add(new_broadcast)
+                    await session.commit()
+                    new_id = new_broadcast.id
+                    
+                    # Start worker
+                    asyncio.create_task(broadcast_worker(new_id))
+                    
+            return RedirectResponse(url="/admin/broadcast", status_code=303)
+        except Exception as e:
+            return RedirectResponse(url="/admin/broadcast", status_code=303)
+
+    @expose("/broadcast/edit/{broadcast_id}", methods=["POST"])
+    async def edit_broadcast(self, request: Request):
+        try:
+            broadcast_id = int(request.path_params["broadcast_id"])
+            form = await request.form()
+            new_text = form.get("message_text")
+            update_sent = form.get("update_sent") == "on"
+            
+            if update_sent:
+                from utils.broadcast_worker import edit_broadcast_worker
+                asyncio.create_task(edit_broadcast_worker(broadcast_id, new_text))
+            else:
+                 # Just update DB
+                from utils.db_api.database import async_session
+                from sqlalchemy import select
+                async with async_session() as session:
+                    result = await session.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
+                    broadcast = result.scalar_one_or_none()
+                    if broadcast:
+                        broadcast.message_text = new_text
+                        await session.commit()
+
+            return RedirectResponse(url="/admin/broadcast", status_code=303)
+        except Exception as e:
+            return RedirectResponse(url="/admin/broadcast", status_code=303)
+            
+    @expose("/broadcast/delete_record/{broadcast_id}", methods=["POST"])
+    async def delete_broadcast_record(self, request: Request):
+        try:
+            broadcast_id = int(request.path_params["broadcast_id"])
+            from utils.db_api.database import async_session
+            from sqlalchemy import select
+            
+            async with async_session() as session:
+                 result = await session.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
+                 broadcast = result.scalar_one_or_none()
+                 if broadcast:
+                     await session.delete(broadcast)
+                     await session.commit()
+                     
+            return RedirectResponse(url="/admin/broadcast", status_code=303)
+        except Exception as e:
+            return RedirectResponse(url="/admin/broadcast", status_code=303)
+
     @expose("/broadcast/delete/{broadcast_id}", methods=["POST"])
     async def delete_broadcast(self, request: Request):
         try:

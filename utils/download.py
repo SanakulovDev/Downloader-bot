@@ -107,7 +107,7 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
         elif is_youtube_url(url):
             # YouTube uchun (ffmpeg bor, shuning uchun maksimal sifat, lekin H264 compatibilty)
             # bestvideo[ext=mp4][vcodec^=avc] -> H.264 formatini tanlash (qora ekran bo'lmasligi uchun)
-            format_selector = 'bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+            format_selector = 'bestvideo[height<=480][ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]'
         else:
             return None
         

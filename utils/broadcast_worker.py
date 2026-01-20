@@ -113,3 +113,39 @@ async def delete_broadcast_worker(broadcast_id: int):
             await asyncio.sleep(0.03) # Rate limit for deletion
             
         logger.info(f"Deleted {deleted_count} messages for broadcast {broadcast_id}")
+
+async def edit_broadcast_worker(broadcast_id: int, new_text: str):
+    """
+    Background task to edit sent broadcast messages.
+    """
+    logger.info(f"Editing broadcast {broadcast_id} to: {new_text[:30]}...")
+    
+    async with async_session() as session:
+        # Update Broadcast record
+        result = await session.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
+        broadcast = result.scalar_one_or_none()
+        if broadcast:
+            broadcast.message_text = new_text
+            await session.commit()
+            
+        # Fetch all messages for this broadcast
+        result = await session.execute(select(BroadcastMessage).where(BroadcastMessage.broadcast_id == broadcast_id))
+        messages = result.scalars().all()
+        
+        edited_count = 0
+        
+        for bm in messages:
+            try:
+                if broadcast.message_type == 'text':
+                    await bot.edit_message_text(chat_id=bm.user_id, message_id=bm.message_id, text=new_text)
+                else:
+                    await bot.edit_message_caption(chat_id=bm.user_id, message_id=bm.message_id, caption=new_text)
+                
+                edited_count += 1
+            except Exception as e:
+                # Message might be too old or user blocked bot
+                pass
+            
+            await asyncio.sleep(0.05) # Rate limit
+            
+        logger.info(f"Edited {edited_count} messages for broadcast {broadcast_id}")

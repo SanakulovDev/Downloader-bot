@@ -123,12 +123,19 @@ async def handle_like(callback: CallbackQuery):
         try:
             # Add to user's like set
             data = f"{video_id}|{title}"
-            await redis_client.sadd(f"user:{user_id}:likes", data)
-            logger.info(f"Added like for user {user_id}: {data}")
+            added_count = await redis_client.sadd(f"user:{user_id}:likes", data)
+            logger.info(f"Added like for user {user_id}: {data} (Result: {added_count})")
+            
+            if added_count == 0:
+                await callback.answer("⚠️ Bu musiqa sevimlilarda allaqachon bor!", show_alert=True)
+                return
+            else:
+                 await callback.answer("❤️ Sevimlilarga qo'shildi!", show_alert=False)
+
         except Exception as e:
             logger.error(f"Redis add error: {e}")
-            
-    await callback.answer("❤️ Sevimlilarga qo'shildi!", show_alert=False)
+            await callback.answer("❌ Xatolik!", show_alert=False)
+            return
     # Remove Like button to prevent spamming? Or keep it. Keeping it is fine.
 
 # mode_music function removed
