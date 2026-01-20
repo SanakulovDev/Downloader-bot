@@ -11,29 +11,27 @@ from utils.validation import is_instagram_url, is_youtube_url
 
 logger = logging.getLogger(__name__)
 
-# --- ENG BARQAROR "WEB" SOZLAMALARI ---
+# --- FIX: WEB CLIENT + AUDIO PRIORITY ---
 COMMON_OPTS = {
-    # 1. Cookie fayli (Web brauzerdan olingan)
+    # 1. Cookie fayli (Web brauzerdan olingan - TURAVERSIN)
     'cookiefile': '/app/cookies.txt',
     
-    # 2. IPv6 (Server uchun toza yo'l)
+    # 2. IPv6 (Server uchun - TURAVERSIN)
     'force_ipv4': False, 
     'force_ipv6': True,
 
-    # 3. FQAT WEB MIJOZ (MUHIM!)
-    # Aralash mijozlar (android/ios) Web cookie bilan ishlaganda xato beradi.
-    # Shuning uchun faqat 'web' ishlatamiz.
+    # 3. MIJOZ: WEB (QAYTARAMIZ!)
+    # Cookie Web brauzerniki bo'lgani uchun, klient ham Web bo'lishi SHART.
+    # Agar buni olib tashlasak, Android klient tushadi va Cookie bilan urishib qoladi.
     'extractor_args': {
         'youtube': {
             'player_client': ['web'],
         }
     },
-
-    # 4. USER AGENT (YANGI)
-    # Biz o'zimizni haqiqiy Chrome brauzeri deb tanishtiramiz.
-    # Bu Cookie bilan 100% mos tushishini ta'minlaydi.
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     
+    # 4. User Agent (Cookie bilan 100% moslik uchun)
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+
     'quiet': True,
     'no_warnings': True,
     'ignoreerrors': True,
@@ -52,14 +50,15 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     ydl_opts = {
         **COMMON_OPTS,
         
-        # Format: "best"
-        # Bu eng xavfsiz variant. Video bo'lsa ham, audio bo'lsa ham,
-        # Youtube nima bersa o'shani olamiz. Tanlash yo'q.
-        'format': 'best',
+        # --- ASOSIY O'ZGARISH (FORMAT) ---
+        # 'best' -> Ba'zan ishlamaydi (Video+Audio topolmasa).
+        # 'bestaudio/best' -> "Avval toza audioni qidir. Agar yo'q bo'lsa, keyin videoga o't".
+        # Music videolarda har doim 'bestaudio' (m4a/opus) bo'ladi. Bu 100% ishlaydi.
+        'format': 'bestaudio/best',
         
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
         
-        # Baribir MP3 ga aylantiramiz
+        # MP3 ga o'girish
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -71,7 +70,7 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     author = "Unknown"
 
     try:
-        logger.info(f"Downloading Audio (Strict Web Mode): {url}")
+        logger.info(f"Downloading Audio (Web Client + BestAudio): {url}")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, url, download=True)
@@ -89,9 +88,10 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         
     return None, None
 
-
+# ... download_video funksiyasi o'zgarishsiz qoladi ...
 async def download_video(url: str, chat_id: int) -> Optional[str]:
-    """Video yuklab olish"""
+    # Video uchun ham formatni 'bestvideo+bestaudio/best' qilish tavsiya etiladi,
+    # lekin hozircha eski 'best' turaversin, agar video yuklashda muammo bo'lmasa.
     temp_file = None
     try:
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
@@ -116,8 +116,7 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
         # YOUTUBE
         ydl_opts = {
             **COMMON_OPTS,
-            # Videoga ham oddiy 'best' beramiz. 
-            # Injiqlik qilib alohida video+audio so'rasak, Youtube bermay qo'yishi mumkin.
+            # Video uchun Universal format
             'format': 'best',
             'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
