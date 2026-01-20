@@ -11,41 +11,43 @@ from utils.validation import is_instagram_url, is_youtube_url
 
 logger = logging.getLogger(__name__)
 
-# Umumiy sozlamalar (Audio va Video uchun ham kerak)
+# --- YANGILANGAN SOZLAMALAR (IPv6) ---
 COMMON_OPTS = {
-    # 'cookiefile': '/app/cookies.txt',  # Docker ichidagi manzil
+    # 1. Sizning IPv6 manzilingiz (Rasmdan olindi)
+    'source_address': '2a02:c207:2303:3466:0000:0000:0000:0001',
+    
+    # 2. IPv6 ni majburlash
+    'force_ipv4': False, 
+    'force_ipv6': True,
+
+    # 3. Android Client (qo'shimcha himoya)
     'extractor_args': {
         'youtube': {
-            'player_client': ['android', 'web'], # Bloklarni aylanib o'tish kaliti
+            'player_client': ['android', 'web'],
         }
     },
-    'nocheckcertificate': True,
+    
+    # Xatoliklar oldini olish
     'quiet': True,
     'no_warnings': True,
     'ignoreerrors': True,
-    'http_chunk_size': 10485760, # 10MB chunk
+    'nocheckcertificate': True,
+    'http_chunk_size': 10485760,
 }
+# -------------------------------------
 
 async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Optional[str]]:
-    """Music yuklab olish - MP3 formatda"""
-    
+    """Music yuklab olish - MP3"""
     url = f"https://www.youtube.com/watch?v={video_id}"
-    temp_filename = f"{video_id}" # Kengaytmani yt-dlp o'zi qo'shadi
-    
-    # Biz kutyapmizki, yakuniy fayl .mp3 bo'ladi
     final_path = Path(TMP_DIR) / f"{video_id}.mp3"
     
-    # 1. Cache tekshirish
     if final_path.exists() and final_path.stat().st_size > 0:
         return str(final_path), f"Audio_{video_id}.mp3"
 
-    # 2. Sozlamalar
     ydl_opts = {
-        **COMMON_OPTS, # Yuqoridagi umumiy sozlamalarni qo'shamiz
+        **COMMON_OPTS, # Yuqoridagi IPv6 sozlamalarini qo'shadi
         'format': 'bestaudio/best',
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
-        
-        # MP3 ga aylantirish
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -57,17 +59,14 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     author = "Unknown"
 
     try:
-        # Info va Download bitta joyda (bloklanishni kamaytirish uchun)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, url, download=True)
             if info:
                 title = info.get('title', 'Audio')
                 author = info.get('uploader', 'Unknown')
             
-        # Fayl nomini chiroyli qilish
         clean_title = f"{title} - {author}".replace('/', '-').replace('\\', '-')
         
-        # Tekshirish
         if final_path.exists() and final_path.stat().st_size > 0:
             return str(final_path), f"{clean_title}.mp3"
             
@@ -78,15 +77,13 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
 
 
 async def download_video(url: str, chat_id: int) -> Optional[str]:
-    """Video yuklab olish (YouTube + Android Client fix)"""
-    
+    """Video yuklab olish (IPv6 bilan)"""
     temp_file = None
     try:
-        # URL hash (cache uchun)
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
         temp_file = Path(TMP_DIR) / f"{url_hash}_{chat_id}.mp4"
         
-        # 1. Redis cache tekshirish
+        # Redis cache...
         if redis_client:
             try:
                 cache_key = f"video:{url_hash}"
@@ -98,35 +95,29 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
                         import shutil
                         shutil.copy2(cached_path_str, temp_file)
                         return str(temp_file)
-            except Exception as e:
-                logger.warning(f"Redis cache error: {e}")
+            except:
+                pass
         
-        # 2. Instagram (alohida mantiq)
+        # Instagram check...
         if is_instagram_url(url):
             result = await download_instagram_direct(url, temp_file)
             if result and os.path.exists(result):
                 return result
-            # Agar direct o'xshamasa, pastda yt-dlp ga tushadi
 
-        # 3. YouTube va boshqalar uchun yt-dlp sozlamalari
+        # YOUTUBE yuklash
         ydl_opts = {
-            **COMMON_OPTS, # Cookie va Android client shu yerda!
-            
-            # Format: MP4 bo'lsin, H264 kodek (Telegram o'qishi uchun), 
-            # 1080p yoki 720p gacha (juda katta bo'lmasligi uchun)
+            **COMMON_OPTS, # IPv6 settings
             'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
             'merge_output_format': 'mp4',
-            'max_filesize': 2 * 1024 * 1024 * 1024,  # 2GB limit
+            'max_filesize': 2 * 1024 * 1024 * 1024,
         }
 
-        # Download
-        logger.info(f"Downloading {url}...")
+        logger.info(f"Downloading {url} via IPv6...")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             await asyncio.to_thread(ydl.download, [url])
 
-        # Faylni qidirish (chunki yt-dlp ba'zan formatni o'zgartiradi)
+        # Faylni topish
         downloaded_file = None
         for file in temp_file.parent.glob(f"{temp_file.stem}.*"):
             if file.suffix in ['.mp4', '.webm', '.mkv'] and file.exists():
@@ -134,26 +125,18 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
                     downloaded_file = file
                     break
         
+        if not downloaded_file and temp_file.exists():
+            downloaded_file = temp_file
+
         if not downloaded_file:
-            # Agar topilmasa, temp_file o'zini tekshiramiz
-            if temp_file.exists():
-                downloaded_file = temp_file
-            else:
-                logger.error("Video fayl topilmadi!")
-                return None
+            return None
 
-        # Hajm tekshiruvi
-        file_size = downloaded_file.stat().st_size
-        file_size_mb = file_size / (1024 * 1024)
-        
-        if file_size > 2 * 1024 * 1024 * 1024: # 2GB
-            logger.warning(f"File too large: {file_size_mb:.2f}MB")
+        # Check size limit
+        if downloaded_file.stat().st_size > 2 * 1024 * 1024 * 1024:
             downloaded_file.unlink()
-            raise ValueError(f"FILE_TOO_LARGE:{file_size_mb:.1f}MB")
+            raise ValueError("FILE_TOO_LARGE")
 
-        logger.info(f"Success: {downloaded_file} ({file_size_mb:.2f}MB)")
-        
-        # Redisga saqlash
+        # Save to Redis
         if redis_client:
             try:
                 await redis_client.setex(f"video:{url_hash}", 3600, str(downloaded_file).encode())

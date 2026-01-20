@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   redis:
     image: redis:7-alpine
@@ -6,8 +8,8 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
-    # ports:
-    #   - "6390:6390"
+    ports:
+      - "6379:6379"  # <-- OCHILDI: Host rejimdagi bot ulanishi uchun kerak
 
   postgres:
     image: postgres:15-alpine
@@ -39,6 +41,11 @@ services:
     build: .
     container_name: ${CONTAINER_NAME}
     restart: always
+    
+    # --- ENG MUHIM QISM (IPV6 UCHUN) ---
+    network_mode: "host"
+    # -----------------------------------
+
     depends_on:
       - redis
       - postgres
@@ -51,8 +58,13 @@ services:
       - ./app/.env
     environment:
       - PYTHONUNBUFFERED=1
-      - REDIS_HOST=redis
+      # Host rejimida bot konteyner nomlarini (redis, postgres) ko'rmaydi.
+      # Shuning uchun 127.0.0.1 (localhost) ishlatamiz.
+      - REDIS_HOST=127.0.0.1 
       - REDIS_PORT=6379
+      # Agar .env ichida DB_HOST=postgres deb yozilgan bo'lsa, 
+      # uni ham kodingizda yoki shu yerda 127.0.0.1 ga o'zgartirish kerak bo'lishi mumkin.
+      - DB_HOST=127.0.0.1
     ulimits:
       nofile:
         soft: 100000  
@@ -61,4 +73,3 @@ services:
 volumes:
   redis_data:
   postgres_data:
- 
