@@ -51,6 +51,10 @@ async def main():
     # Start Workers
     workers = await start_workers()
     
+    # Register Middleware
+    from utils.middlewares.activity import ActivityMiddleware
+    dp.update.middleware(ActivityMiddleware())
+
     # Register Routers
     dp.include_router(start.router)
     dp.include_router(admin.router)

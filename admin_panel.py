@@ -282,13 +282,48 @@ async def submit_support(data: SupportRequest):
         traceback.print_exc()
         return {"status": "error", "message": str(e)}
 
+# --- Statistics Dashboard ---
+class StatisticsView(BaseView):
+    name = "Statistics"
+    icon = "fa-solid fa-chart-line"
+    identity = "stats_home"
+
+    @expose("/stats", methods=["GET"])
+    async def stats_page(self, request: Request):
+        from sqlalchemy import select, func
+        from utils.db_api.database import async_session
+        from utils.db_api.models import User
+        from datetime import datetime, timedelta
+        
+        async with async_session() as session:
+            now = datetime.utcnow()
+            last_24h = now - timedelta(hours=24)
+            last_30d = now - timedelta(days=30)
+            
+            # Total Users
+            total_users = await session.scalar(select(func.count(User.id)))
+            
+            # DAU (Active in last 24 hours)
+            dau = await session.scalar(select(func.count(User.id)).where(User.last_active >= last_24h))
+            
+            # MAU (Active in last 30 days)
+            mau = await session.scalar(select(func.count(User.id)).where(User.last_active >= last_30d))
+            
+        return await self.templates.TemplateResponse(request, "admin_stats.html", context={
+            "total_users": total_users,
+            "dau": dau,
+            "mau": mau
+        })
+
+admin.add_view(StatisticsView)
+
 # --- Support Admin Dashboard ---
 class SupportView(BaseView):
     name = "Support"
     icon = "fa-solid fa-envelope"
-    identity = "support_hub"
+    identity = "support_home"
 
-    @expose("/inbox", methods=["GET"])
+    @expose("/support/inbox", methods=["GET"])
     async def support_dashboard(self, request: Request):
         from starlette.templating import Jinja2Templates
         from sqlalchemy import select, desc
@@ -308,14 +343,14 @@ class SupportView(BaseView):
             
         return await self.templates.TemplateResponse(request, "admin_support.html", context={"tickets": tickets})
 
-    @expose("/reply/{ticket_id}", methods=["POST"])
+    @expose("/support/reply/{ticket_id}", methods=["POST"])
     async def support_reply(self, request: Request):
         ticket_id = int(request.path_params["ticket_id"])
         form = await request.form()
         reply_text = form.get("reply_text")
         
         if not reply_text:
-            return RedirectResponse(url="/admin/support_hub/inbox", status_code=303)
+            return RedirectResponse(url="/admin/support/inbox", status_code=303)
             
         from utils.db_api.database import async_session
         from sqlalchemy import select, func
@@ -344,6 +379,6 @@ class SupportView(BaseView):
                     import logging
                     logging.error(f"Failed to send reply to {ticket.user_id}: {e}")
                     
-        return RedirectResponse(url="/admin/support_hub/inbox", status_code=303)
+        return RedirectResponse(url="/admin/support/inbox", status_code=303)
 
 admin.add_view(SupportView)
