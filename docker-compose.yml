@@ -36,6 +36,19 @@ services:
       - "23456:8000"
     depends_on:
       - postgres
+    # --- YANGI QO'SHILGAN QISM ---
+    environment:
+      # Biz Admin Panelga: "Baza manzili - postgres, Logini - postgres" deb qattiq tayinlaymiz.
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASS=postgres_pass
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres_pass
+      # SQLALCHEMY uchun aniq manzil (Eng ishonchli usul):
+      - DATABASE_URL=postgresql://postgres:postgres_pass@postgres:5432/downloader_db
+    # -----------------------------
 
   downloader-bot:
     build: .
