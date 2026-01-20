@@ -19,11 +19,7 @@ router = Router()
 
 from aiogram.filters import Command
 
-@router.message(F.text == "🎬 Video Yuklash")
-@router.message(Command("video"))
-async def mode_video(message: Message, state: FSMContext):
-    await state.set_state(BotStates.video_mode)
-    await message.answer("🎬 <b>Video rejimidasiz.</b>\n\nYouTube yoki Instagram link yuboring:", parse_mode='HTML')
+# mode_video function removed
 
 
 @router.callback_query(F.data.startswith('recognize_music:'))
@@ -105,26 +101,17 @@ async def handle_recognize_music(callback: CallbackQuery):
                 pass
 
 
-@router.message(BotStates.video_mode)
-async def handle_video_message(message: Message):
-    """Video rejimida ishlash"""
-    text = message.text
+# Legacy state handler removed
+
+
+
+async def handle_video_logic(message: Message, url: str):
+    """
+    Main Logic that processes a video URL.
+    Can be called from main_handler or any other place.
+    """
     chat_id = message.chat.id
     
-    if text in ["🎬 Video Yuklash", "🎵 Musiqa Qidirish"]:
-         # Agar menyu bosilsa
-         await message.answer("Rejimni o'zgartirish uchun qaytadan tanlang.", reply_markup=main_menu)
-         return
-
-    url = extract_url(text)
-    if not url:
-        await message.answer("❌ Iltimos, video link yuboring.")
-        return
-
-    if not (is_youtube_url(url) or is_instagram_url(url)):
-        await message.answer("❌ Faqat YouTube va Instagram videolari qo'llab-quvvatlanadi!")
-        return
-
     status_msg = await message.answer(f"🎬 Yuklab olinmoqda: <b>{url}</b>", parse_mode='HTML')
     
     # Queue ga qo'shish

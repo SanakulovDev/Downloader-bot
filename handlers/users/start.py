@@ -5,7 +5,6 @@ from aiogram.fsm.context import FSMContext
 
 from loader import dp, db
 from states.bot_states import BotStates
-from keyboards.default_keyboards import main_menu
 from utils.db_api.models import User
 from sqlalchemy import select
 
@@ -27,11 +26,18 @@ async def cmd_start(message: Message, state: FSMContext):
     except Exception as e:
         print(f"Error checking user: {e}")
 
-    await state.set_state(BotStates.waiting_for_mode)
+    
+    # OLD CODE: await state.set_state(BotStates.waiting_for_mode)
+    # NEW CODE: Clear state so main_handler catches messages
+    await state.clear()
+    
     await message.answer(
-        "👋 Salom! Men universal media botman.\n\n"
-        "Quyidagi bo'limlardan birini tanlang:",
-        reply_markup=main_menu
+        "👋 <b>Universal Media Botga xush kelibsiz!</b>\n\n"
+        "Men quyidagilarni bajara olaman:\n"
+        "📹 <b>Video yuklash:</b> Instagram yoki YouTube link yuboring.\n"
+        "🎵 <b>Musiqa topish:</b> Qo'shiq yoki ijrochi nomini yozing.\n\n"
+        "<i>Shunchaki link yoki nom yuboring, men o'zim tushunib olaman!</i> 🚀",
+        parse_mode='HTML'
     )
 
 @router.message(BotStates.waiting_for_name)
@@ -51,11 +57,12 @@ async def process_name(message: Message, state: FSMContext):
         await message.answer("Xatolik yuz berdi, iltimos qaytadan urinib ko'ring /start")
         return
 
-    await state.set_state(BotStates.waiting_for_mode)
+    await state.clear()
     await message.answer(
         f"Rahmat, {full_name}! Ro'yxatdan o'tdingiz.\n\n"
-        "Quyidagi bo'limlardan birini tanlang:",
-        reply_markup=main_menu
+        "📹 <b>Video yuklash:</b> Instagram yoki YouTube link yuboring.\n"
+        "🎵 <b>Musiqa topish:</b> Qo'shiq nomini yozing.",
+        parse_mode='HTML'
     )
 
 @router.message(Command("help"))

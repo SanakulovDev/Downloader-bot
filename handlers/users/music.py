@@ -131,19 +131,19 @@ async def handle_like(callback: CallbackQuery):
     await callback.answer("❤️ Sevimlilarga qo'shildi!", show_alert=False)
     # Remove Like button to prevent spamming? Or keep it. Keeping it is fine.
 
-@router.message(F.text == "🎵 Musiqa Qidirish")
-@router.message(Command("music"))
-async def mode_music(message: Message, state: FSMContext):
-    await state.set_state(BotStates.music_mode)
-    await message.answer("🎵 <b>Musiqa rejimidasiz.</b>\n\nQo'shiq yoki artist nomini yozing:", parse_mode='HTML')
+# mode_music function removed
 
-@router.message(BotStates.music_mode)
-async def handle_music_message(message: Message, state: FSMContext):
-    """Musiqa rejimida ishlash"""
+# Legacy state handler removed
+
+async def handle_music_logic(message: Message, state: FSMContext):
+    """
+    Main Logic that searches for music.
+    """
     text = message.text
     
-    if text in ["🎬 Video Yuklash", "🎵 Musiqa Qidirish"]:
-         return
+    # Simple check to avoid processing commands if called directly
+    if text.startswith("/"):
+        return
 
     status_msg = await message.answer(f"🔍 Qidirilmoqda: <b>{text}</b>...", parse_mode='HTML')
     

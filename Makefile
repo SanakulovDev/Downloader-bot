@@ -7,7 +7,7 @@ DOCKER_COMPOSE := docker-compose --env-file app/.env
 .PHONY: build up down logs restart clean exec
 
 make setup:
-	$(DOCKER_COMPOSE) build && $(DOCKER_COMPOSE) up -d
+	$(DOCKER_COMPOSE) build && $(DOCKER_COMPOSE) down && $(DOCKER_COMPOSE) up -d
 
 build:
 	$(DOCKER_COMPOSE) build
