@@ -11,25 +11,29 @@ from utils.validation import is_instagram_url, is_youtube_url
 
 logger = logging.getLogger(__name__)
 
-# --- FIX: WEB CLIENT + AUDIO PRIORITY ---
+# --- FIX: REMOTE COMPONENTS + WEB CLIENT ---
 COMMON_OPTS = {
-    # 1. Cookie fayli (Web brauzerdan olingan - TURAVERSIN)
+    # 1. Cookie fayli (Web brauzerdan olingan)
     'cookiefile': '/app/cookies.txt',
     
-    # 2. IPv6 (Server uchun - TURAVERSIN)
+    # 2. IPv6
     'force_ipv4': False, 
     'force_ipv6': True,
 
-    # 3. MIJOZ: WEB (QAYTARAMIZ!)
-    # Cookie Web brauzerniki bo'lgani uchun, klient ham Web bo'lishi SHART.
-    # Agar buni olib tashlasak, Android klient tushadi va Cookie bilan urishib qoladi.
+    # 3. MIJOZ: WEB
+    # Cookie faylingiz Web brauzerniki, shuning uchun klient ham Web bo'lishi shart.
     'extractor_args': {
         'youtube': {
             'player_client': ['web'],
         }
     },
     
-    # 4. User Agent (Cookie bilan 100% moslik uchun)
+    # 4. REMOTE COMPONENTS (SIZ TOPGAN YECHIM)
+    # Bu opsiya yt-dlp ga JS challenge-ni yechish uchun kerakli
+    # tashqi komponentlarni (ejs) yuklab olishga ruxsat beradi.
+    'remote_components': {'ejs': 'github'},
+
+    # 5. User Agent (Cookie bilan moslik uchun)
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 
     'quiet': True,
@@ -50,15 +54,14 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     ydl_opts = {
         **COMMON_OPTS,
         
-        # --- ASOSIY O'ZGARISH (FORMAT) ---
-        # 'best' -> Ba'zan ishlamaydi (Video+Audio topolmasa).
-        # 'bestaudio/best' -> "Avval toza audioni qidir. Agar yo'q bo'lsa, keyin videoga o't".
-        # Music videolarda har doim 'bestaudio' (m4a/opus) bo'ladi. Bu 100% ishlaydi.
+        # FORMAT:
+        # Endi JS challenge yechilgani uchun, biz yana jasurlik bilan
+        # 'bestaudio/best' ni ishlata olamiz. 
+        # Agar toza audio (m4a) bo'lsa uni oladi, bo'lmasa 18-formatni (mp4) olib audiosini ajratadi.
         'format': 'bestaudio/best',
         
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
         
-        # MP3 ga o'girish
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -70,7 +73,7 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     author = "Unknown"
 
     try:
-        logger.info(f"Downloading Audio (Web Client + BestAudio): {url}")
+        logger.info(f"Downloading Audio (Web + RemoteComponents): {url}")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, url, download=True)
@@ -88,10 +91,9 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         
     return None, None
 
-# ... download_video funksiyasi o'zgarishsiz qoladi ...
+
 async def download_video(url: str, chat_id: int) -> Optional[str]:
-    # Video uchun ham formatni 'bestvideo+bestaudio/best' qilish tavsiya etiladi,
-    # lekin hozircha eski 'best' turaversin, agar video yuklashda muammo bo'lmasa.
+    """Video yuklab olish"""
     temp_file = None
     try:
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
@@ -116,7 +118,7 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
         # YOUTUBE
         ydl_opts = {
             **COMMON_OPTS,
-            # Video uchun Universal format
+            # JS challenge yechilgach, 'best' formati aniq ishlaydi (u 18-formatni topadi).
             'format': 'best',
             'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
