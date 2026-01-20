@@ -2,6 +2,7 @@ import yt_dlp
 import asyncio
 import json
 import logging
+import os
 from loader import redis_client
 
 logger = logging.getLogger(__name__)
@@ -25,8 +26,6 @@ async def search_music(query: str):
         # 'cookiefile': '/app/app/cookies.txt',
         'extract_flat': 'in_playlist', # Only extract flat for playlists
         'noplaylist': True,
-        'username': os.getenv('YT_USERNAME', 'oauth2'), 
-        'password': os.getenv('YT_PASSWORD', ''),
     }
     
     try:
