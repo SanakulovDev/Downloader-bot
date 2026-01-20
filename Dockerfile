@@ -1,5 +1,5 @@
 FROM python:3.11-slim
-
+ARG DEBIAN_FRONTEND=noninteractive
 COPY --from=denoland/deno:bin /deno /usr/bin/deno
 
 # Sistem paketlarini o'rnatish
