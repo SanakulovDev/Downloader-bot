@@ -41,7 +41,7 @@ async def handle_recognize_music(callback: CallbackQuery):
             'outtmpl': str(temp_audio),
             'quiet': True,
             'max_filesize': 10 * 1024 * 1024, # 10MB yetadi
-            # 'cookiefile': '/app/app/cookies.txt',
+            'cookiefile': '/app/cookies.txt',
            'username': os.getenv('YT_USERNAME', 'oauth2'), 
            'password': os.getenv('YT_PASSWORD', ''),
            'user_agent': os.getenv('USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3')

@@ -41,7 +41,7 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         'format': 'bestaudio[ext=m4a]/bestaudio',
         'outtmpl': str(temp_file),
         'quiet': True,
-        # 'cookiefile': '/app/app/cookies.txt',
+        'cookiefile': '/app/cookies.txt',
         'no_warnings': True,
         # Speed optimizations
         'concurrent_fragment_downloads': 5,
