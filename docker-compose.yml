@@ -47,6 +47,7 @@ services:
     volumes:
       - .:/app
       - /dev/shm:/dev/shm
+      - ./cookies.txt:/app/cookies.txt  # <-- ENG MUHIMI SHU
     env_file:
       - ./app/.env
     environment:

@@ -47,7 +47,8 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         'concurrent_fragment_downloads': 5,
         'http_chunk_size': 10485760, # 10MB
         'username': os.getenv('YT_USERNAME', 'oauth2'), 
-    'password': os.getenv('YT_PASSWORD', ''),
+        'password': os.getenv('YT_PASSWORD', ''),
+        'user_agent': os.getenv('USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3')
     }
     
     try:

@@ -44,6 +44,7 @@ async def handle_recognize_music(callback: CallbackQuery):
             # 'cookiefile': '/app/app/cookies.txt',
            'username': os.getenv('YT_USERNAME', 'oauth2'), 
            'password': os.getenv('YT_PASSWORD', ''),
+           'user_agent': os.getenv('USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3')
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
