@@ -41,11 +41,13 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         'format': 'bestaudio[ext=m4a]/bestaudio',
         'outtmpl': str(temp_file),
         'quiet': True,
-        'cookiefile': '/app/app/cookies.txt',
+        # 'cookiefile': '/app/app/cookies.txt',
         'no_warnings': True,
         # Speed optimizations
         'concurrent_fragment_downloads': 5,
         'http_chunk_size': 10485760, # 10MB
+        'username': 'sanakulov',                # <-- Mana shu yangi usul
+        'password': 'sanakulov123',
     }
     
     try:
