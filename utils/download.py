@@ -11,21 +11,19 @@ from utils.validation import is_instagram_url, is_youtube_url
 
 logger = logging.getLogger(__name__)
 
-# --- ENG KUCHLI SOZLAMALAR ---
+# --- ENG YAKUNIY TO'G'RI SOZLAMALAR ---
 COMMON_OPTS = {
-    # 1. Cookie fayli (SSH Tunnel orqali olingan)
+    # 1. Cookie fayli (Bor)
     'cookiefile': '/app/cookies.txt',
     
-    # 2. IPv6 majburiy
+    # 2. IPv6 (Bor)
     'force_ipv4': False, 
     'force_ipv6': True,
 
-    # 3. Web Client
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['web'],
-        }
-    },
+    # 3. MIJOZNI CHEKLAMAYMIZ (MUHIM O'ZGARISH)
+    # Biz 'extractor_args' ni butunlay olib tashlaymiz.
+    # yt-dlp o'zi eng to'g'ri klientni (Android/iOS/Web) tanlaydi.
+    # Bu "Requested format not available" xatosini yo'qotadi.
     
     'quiet': True,
     'no_warnings': True,
@@ -35,7 +33,7 @@ COMMON_OPTS = {
 }
 
 async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Optional[str]]:
-    """Music yuklab olish - MP3 (ENG SODDA VA ISHONCHLI)"""
+    """Music yuklab olish - MP3"""
     url = f"https://www.youtube.com/watch?v={video_id}"
     final_path = Path(TMP_DIR) / f"{video_id}.mp3"
     
@@ -45,15 +43,12 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     ydl_opts = {
         **COMMON_OPTS,
         
-        # --- O'ZGARISH ---
-        # Biz "bestaudio" deb qidirmaymiz. 
-        # Shunchaki "best" deymiz. Bu Youtube-da bor eng yaxshi faylni (Video+Audio) tortadi.
-        # Bu 100% ishlaydi, chunki "best" har doim mavjud.
-        'format': 'best',
+        # Format: Eng oddiy va ishonchli zanjir
+        # 1. bestaudio/best (eng yaxshisini ol)
+        'format': 'bestaudio/best',
         
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
         
-        # Baribir MP3 qilib beradi
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -65,9 +60,7 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     author = "Unknown"
 
     try:
-        # Logga yozib qo'yamiz, nima bo'layotganini ko'rish uchun
-        logger.info(f"Downloading Audio (Format: BEST): {url}")
-        
+        logger.info(f"Downloading Audio (Auto Client): {url}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, url, download=True)
             if info:
@@ -83,6 +76,7 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         logger.error(f"Audio download error: {e}")
         
     return None, None
+
 
 async def download_video(url: str, chat_id: int) -> Optional[str]:
     """Video yuklab olish"""
@@ -110,7 +104,7 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
         # YOUTUBE
         ydl_opts = {
             **COMMON_OPTS,
-            # Videoga ham xuddi shunday "borini ol" sharti
+            # Video uchun ham formatni soddalashtiramiz
             'format': 'best/bestvideo+bestaudio',
             'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
