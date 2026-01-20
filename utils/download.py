@@ -13,28 +13,30 @@ logger = logging.getLogger(__name__)
 
 # --- YANGILANGAN SOZLAMALAR (IPv6) ---
 COMMON_OPTS = {
-    # 1. source_address ni olib tashlaymiz (yoki kommentga olamiz).
-    # Sababi: Sizda ping6 ishladi, demak server o'zi yo'lni topadi.
-    # Qo'lda yozish ba'zan "Network is unreachable" xatosini berishi mumkin.
-    # 'source_address': '...', 
+    # 1. OAuth2 rejimini yoqish
+    'username': 'oauth2',
+    'password': '',
     
-    # 2. IPv6 ni majburlash
+    # 2. IPv6 ni qoldiramiz (tezlik uchun)
     'force_ipv4': False, 
     'force_ipv6': True,
 
-    # 3. MASKIROVKA: "iOS" (iPhone)
-    # Hozirda Androidga qaraganda iOS kamroq bloklanyapti.
+    # 3. Loglarni ko'rish uchun (KODNI KO'RISH UCHUN SHART!)
+    'quiet': False, 
+    'no_warnings': False,
+    
+    # 4. Tokenni saqlash joyi (Docker o'chganda ketib qolmasligi uchun)
+    'cache_dir': '/app/.cache',
+
+    # 5. Oddiy Web klient (OAuth bilan shu yaxshi ishlaydi)
     'extractor_args': {
         'youtube': {
-            'player_client': ['ios'], 
+            'player_client': ['web'],
         }
     },
     
-    # Qo'shimcha xavfsizlik
-    'nocheckcertificate': True,
-    'quiet': True,
-    'no_warnings': True,
     'ignoreerrors': True,
+    'nocheckcertificate': True,
     'http_chunk_size': 10485760,
 }
 # -------------------------------------
