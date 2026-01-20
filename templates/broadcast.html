@@ -124,20 +124,21 @@
                 </button>
                 <ul class="dropdown-menu">
                   <li><a class="dropdown-item" href="#" onclick="viewBroadcast('{{ item.id }}', `{{ item.message_text }}`, '{{ item.message_type }}', '{{ item.file_id }}', '{{ item.status }}', '{{ item.sent_count }}', '{{ item.total_users }}')">👁️ View</a></li>
-                  <li><a class="dropdown-item" href="#" onclick="editBroadcast('{{ item.id }}', `{{ item.message_text }}`)">✏️ Edit</a></li>
+                  <li><a class="dropdown-item" href="#" onclick="editBroadcast('{{ item.id }}', `{{ item.message_text }}`, '{{ item.message_type }}', '{{ item.file_id }}')">✏️ Edit</a></li>
                   <li>
-                      <form action="{{ url_for('resend_broadcast', broadcast_id=item.id) }}" method="POST" style="display:inline;">
+                  <li>
+                      <form action="/admin/broadcast-resend/{{ item.id }}" method="POST" style="display:inline;">
                           <button type="submit" class="dropdown-item">🔄 Resend</button>
                       </form>
                   </li>
                   <li><hr class="dropdown-divider"></li>
                   <li>
-                      <form action="{{ url_for('delete_broadcast', broadcast_id=item.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Recall messages from users?');">
+                      <form action="/admin/broadcast-delete/{{ item.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Recall messages from users?');">
                           <button type="submit" class="dropdown-item text-warning">🗑️ Recall Msg</button>
                       </form>
                   </li>
                   <li>
-                      <form action="{{ url_for('delete_broadcast_record', broadcast_id=item.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete record permanently?');">
+                      <form action="/admin/broadcast-delete-record/{{ item.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete record permanently?');">
                           <button type="submit" class="dropdown-item text-danger">❌ Delete Record</button>
                       </form>
                   </li>
@@ -199,13 +200,45 @@
         modal.show();
     }
 
-    function editBroadcast(id, text) {
+    function editBroadcast(id, text, type, fileId) {
         document.getElementById('editId').value = id;
         document.getElementById('editText').value = text;
-        document.getElementById('editForm').action = `/admin/broadcast/edit/${id}`;
+        document.getElementById('editMessageType').value = type;
+        if (type !== 'text') {
+             document.getElementById('editFileId').value = fileId || '';
+        } else {
+             document.getElementById('editFileId').value = '';
+        }
+        
+        document.getElementById('editForm').action = `/admin/broadcast-edit/${id}`;
+        
+        // Trigger UI updates
+        toggleEditFields();
         
         const modal = new bootstrap.Modal(document.getElementById('editModal'));
         modal.show();
+    }
+
+    function toggleEditFields() {
+        const type = document.getElementById('editMessageType').value;
+        const section = document.getElementById('editMediaSection');
+        if (type !== 'text') {
+            section.style.display = 'block';
+            toggleEditSource();
+        } else {
+            section.style.display = 'none';
+        }
+    }
+
+    function toggleEditSource() {
+        const source = document.querySelector('input[name="edit_media_source"]:checked').value;
+        if (source === 'link') {
+            document.getElementById('editLinkGroup').style.display = 'block';
+            document.getElementById('editUploadGroup').style.display = 'none';
+        } else {
+            document.getElementById('editLinkGroup').style.display = 'none';
+            document.getElementById('editUploadGroup').style.display = 'block';
+        }
     }
 </script>
 
@@ -241,11 +274,41 @@
         <h5 class="modal-title">Edit Broadcast</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form id="editForm" method="POST">
+      <form id="editForm" method="POST" enctype="multipart/form-data">
           <div class="modal-body">
              <input type="hidden" name="broadcast_id" id="editId">
              <div class="mb-3">
-                 <label class="form-label">Message Text</label>
+                 <label class="form-label">Message Type</label>
+                 <select class="form-control" name="message_type" id="editMessageType" onchange="toggleEditFields()">
+                    <option value="text">Text Message</option>
+                    <option value="photo">Photo</option>
+                    <option value="video">Video</option>
+                    <option value="animation">GIF (Animation)</option>
+                 </select>
+             </div>
+
+             <div class="mb-3 p-3 border rounded bg-light" id="editMediaSection" style="display:none;">
+                 <label class="form-label fw-bold">Update Media (Optional)</label>
+                 
+                 <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="edit_media_source" id="editSourceLink" value="link" checked onchange="toggleEditSource()">
+                    <label class="form-check-label" for="editSourceLink">Link / File ID</label>
+                 </div>
+                 <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="edit_media_source" id="editSourceUpload" value="upload" onchange="toggleEditSource()">
+                    <label class="form-check-label" for="editSourceUpload">Upload New File</label>
+                 </div>
+
+                 <div class="mt-2" id="editLinkGroup">
+                     <input type="text" class="form-control" name="file_id" id="editFileId" placeholder="New File ID or URL">
+                 </div>
+                 <div class="mt-2" id="editUploadGroup" style="display:none;">
+                     <input type="file" class="form-control" name="file_upload">
+                 </div>
+             </div>
+
+             <div class="mb-3">
+                 <label class="form-label">Message Text / Caption</label>
                  <textarea name="message_text" id="editText" class="form-control" rows="5"></textarea>
              </div>
              <div class="form-check form-switch">
@@ -253,7 +316,7 @@
                  <label class="form-check-label" for="updateSent">Update Sent Messages (Telegram)</label>
              </div>
              <div class="text-muted small mt-2">
-                 Note: Only text/caption can be updated. Media files cannot be changed.
+                 Note: Changing Type will DELETE old messages and SEND new ones.
              </div>
           </div>
           <div class="modal-footer">

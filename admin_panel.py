@@ -107,8 +107,10 @@ class BroadcastView(BaseView):
 
         return await self.templates.TemplateResponse(request, "broadcast.html", {"history": history})
 
-    @expose("/broadcast/resend/{broadcast_id}", methods=["POST"])
+    @expose("/broadcast-resend/{broadcast_id}", methods=["GET", "POST"])
     async def resend_broadcast(self, request: Request):
+        if request.method == "GET":
+             return RedirectResponse(url="/admin/broadcast", status_code=303)
         try:
             broadcast_id = int(request.path_params["broadcast_id"])
             from utils.db_api.database import async_session
@@ -138,17 +140,41 @@ class BroadcastView(BaseView):
         except Exception as e:
             return RedirectResponse(url="/admin/broadcast", status_code=303)
 
-    @expose("/broadcast/edit/{broadcast_id}", methods=["POST"])
+    @expose("/broadcast-edit/{broadcast_id}", methods=["GET", "POST"])
     async def edit_broadcast(self, request: Request):
+        if request.method == "GET":
+             return RedirectResponse(url="/admin/broadcast", status_code=303)
         try:
             broadcast_id = int(request.path_params["broadcast_id"])
             form = await request.form()
             new_text = form.get("message_text")
             update_sent = form.get("update_sent") == "on"
             
+            # New fields
+            new_type = form.get("message_type")
+            new_file_id = None
+            
+            # Check for file upload (edit_media_source=upload/link)
+            edit_source = form.get("edit_media_source")
+            uploaded_file = form.get("file_upload")
+            
+            if new_type and new_type != 'text':
+                if edit_source == 'upload' and uploaded_file and hasattr(uploaded_file, "filename") and uploaded_file.filename:
+                    import shutil
+                    from pathlib import Path
+                    upload_dir = Path("/app/downloads/broadcasts")
+                    upload_dir.mkdir(parents=True, exist_ok=True)
+                    file_path = upload_dir / uploaded_file.filename
+                    with open(file_path, "wb") as buffer:
+                        shutil.copyfileobj(uploaded_file.file, buffer)
+                    new_file_id = str(file_path)
+                else:
+                    new_file_id = form.get("file_id")
+
             if update_sent:
                 from utils.broadcast_worker import edit_broadcast_worker
-                asyncio.create_task(edit_broadcast_worker(broadcast_id, new_text))
+                # Pass all new data to worker
+                asyncio.create_task(edit_broadcast_worker(broadcast_id, new_text, new_type, new_file_id))
             else:
                  # Just update DB
                 from utils.db_api.database import async_session
@@ -158,14 +184,20 @@ class BroadcastView(BaseView):
                     broadcast = result.scalar_one_or_none()
                     if broadcast:
                         broadcast.message_text = new_text
+                        if new_type:
+                            broadcast.message_type = new_type
+                        if new_file_id:
+                            broadcast.file_id = new_file_id
                         await session.commit()
 
             return RedirectResponse(url="/admin/broadcast", status_code=303)
         except Exception as e:
             return RedirectResponse(url="/admin/broadcast", status_code=303)
             
-    @expose("/broadcast/delete_record/{broadcast_id}", methods=["POST"])
+    @expose("/broadcast-delete-record/{broadcast_id}", methods=["GET", "POST"])
     async def delete_broadcast_record(self, request: Request):
+        if request.method == "GET":
+             return RedirectResponse(url="/admin/broadcast", status_code=303)
         try:
             broadcast_id = int(request.path_params["broadcast_id"])
             from utils.db_api.database import async_session
@@ -182,8 +214,10 @@ class BroadcastView(BaseView):
         except Exception as e:
             return RedirectResponse(url="/admin/broadcast", status_code=303)
 
-    @expose("/broadcast/delete/{broadcast_id}", methods=["POST"])
+    @expose("/broadcast-delete/{broadcast_id}", methods=["GET", "POST"])
     async def delete_broadcast(self, request: Request):
+        if request.method == "GET":
+             return RedirectResponse(url="/admin/broadcast", status_code=303)
         try:
             broadcast_id = int(request.path_params["broadcast_id"])
             from utils.broadcast_worker import delete_broadcast_worker

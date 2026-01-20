@@ -114,38 +114,119 @@ async def delete_broadcast_worker(broadcast_id: int):
             
         logger.info(f"Deleted {deleted_count} messages for broadcast {broadcast_id}")
 
-async def edit_broadcast_worker(broadcast_id: int, new_text: str):
+async def edit_broadcast_worker(broadcast_id: int, new_text: str, new_type: str = None, new_file_id: str = None):
     """
     Background task to edit sent broadcast messages.
+    Supports:
+    1. Text edit (if type is same)
+    2. Media edit (if type supports it via edit_message_media) - simplified to delete/resend if needed
+    3. Type change (Delete + Send new)
     """
-    logger.info(f"Editing broadcast {broadcast_id} to: {new_text[:30]}...")
+    logger.info(f"Editing broadcast {broadcast_id}...")
     
     async with async_session() as session:
         # Update Broadcast record
         result = await session.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
         broadcast = result.scalar_one_or_none()
-        if broadcast:
-            broadcast.message_text = new_text
-            await session.commit()
-            
-        # Fetch all messages for this broadcast
+        
+        if not broadcast:
+            return
+
+        old_type = broadcast.message_type
+        
+        # Update DB fields
+        broadcast.message_text = new_text
+        if new_type:
+             broadcast.message_type = new_type
+        if new_file_id:
+             broadcast.file_id = new_file_id
+             
+        await session.commit()
+        
+        # Determine strategy
+        # Strategy A: Simple Text Edit (Same type, Text only)
+        # Strategy B: Full Replace (Type changed OR Media changed) -> Delete + Send
+        
+        mode = 'text_edit'
+        if new_type and new_type != old_type:
+            mode = 'replace'
+        elif new_file_id and new_file_id != broadcast.file_id:
+             mode = 'replace'
+        
+        # Fetch all messages
         result = await session.execute(select(BroadcastMessage).where(BroadcastMessage.broadcast_id == broadcast_id))
         messages = result.scalars().all()
         
         edited_count = 0
         
+        # Prepare media for replace mode
+        media_obj = None
+        if mode == 'replace':
+             media_path = broadcast.file_id
+             if media_path and (media_path.startswith("/app/") or media_path.startswith(".") or "/" in media_path):
+                 from aiogram.types import FSInputFile
+                 import os
+                 if os.path.exists(media_path):
+                     media_obj = FSInputFile(media_path)
+                 else:
+                     media_obj = media_path # Fallback to ID
+             else:
+                 media_obj = media_path
+
         for bm in messages:
             try:
-                if broadcast.message_type == 'text':
-                    await bot.edit_message_text(chat_id=bm.user_id, message_id=bm.message_id, text=new_text)
-                else:
-                    await bot.edit_message_caption(chat_id=bm.user_id, message_id=bm.message_id, caption=new_text)
+                if mode == 'text_edit':
+                    if broadcast.message_type == 'text':
+                        await bot.edit_message_text(chat_id=bm.user_id, message_id=bm.message_id, text=new_text)
+                    else:
+                        await bot.edit_message_caption(chat_id=bm.user_id, message_id=bm.message_id, caption=new_text)
                 
+                elif mode == 'replace':
+                    # 1. Delete old
+                    try:
+                        await bot.delete_message(chat_id=bm.user_id, message_id=bm.message_id)
+                    except:
+                        pass # Message might be old
+                    
+                    # 2. Send new
+                    msg = None
+                    if broadcast.message_type == 'text':
+                        msg = await bot.send_message(chat_id=bm.user_id, text=broadcast.message_text)
+                    elif broadcast.message_type == 'photo':
+                         # Re-create FSInputFile for each send if strictly needed, or reuse? 
+                         # aiogram FSInputFile can be reused usually but safer to re-init if stream closed
+                         curr_media = media_obj
+                         if hasattr(media_obj, 'path'): # Is FSInputFile
+                             from aiogram.types import FSInputFile
+                             curr_media = FSInputFile(media_obj.path)
+                             
+                         msg = await bot.send_photo(chat_id=bm.user_id, photo=curr_media, caption=broadcast.message_text)
+                    elif broadcast.message_type == 'video':
+                         curr_media = media_obj
+                         if hasattr(media_obj, 'path'):
+                             from aiogram.types import FSInputFile
+                             curr_media = FSInputFile(media_obj.path)
+                         msg = await bot.send_video(chat_id=bm.user_id, video=curr_media, caption=broadcast.message_text)
+                    elif broadcast.message_type == 'animation':
+                         curr_media = media_obj
+                         if hasattr(media_obj, 'path'):
+                             from aiogram.types import FSInputFile
+                             curr_media = FSInputFile(media_obj.path)
+                         msg = await bot.send_animation(chat_id=bm.user_id, animation=curr_media, caption=broadcast.message_text)
+
+                    # Update Message ID in DB
+                    if msg:
+                        bm.message_id = msg.message_id
+            
                 edited_count += 1
             except Exception as e:
-                # Message might be too old or user blocked bot
+                # logger.error(f"Edit failed for {bm.user_id}: {e}")
                 pass
             
             await asyncio.sleep(0.05) # Rate limit
             
-        logger.info(f"Edited {edited_count} messages for broadcast {broadcast_id}")
+        # Commit updated message IDs if replaced
+        if mode == 'replace':
+            await session.commit()
+            
+        logger.info(f"Edited {edited_count} messages for broadcast {broadcast_id} (Mode: {mode})")
