@@ -89,11 +89,12 @@ async def broadcast_worker(broadcast_id: int):
         logger.error(f"CRITICAL ERROR in broadcast_worker: {e}")
         print(f"DEBUG: CRITICAL ERROR: {e}")
 
-async def delete_broadcast_worker(broadcast_id: int):
+async def delete_broadcast_worker(broadcast_id: int, delete_record: bool = False):
     """
     Background task to delete broadcast messages.
+    If delete_record is True, also deletes the broadcast record from DB after messages.
     """
-    logger.info(f"Deleting broadcast {broadcast_id}")
+    logger.info(f"Deleting broadcast {broadcast_id} (Record delete: {delete_record})")
     
     async with async_session() as session:
         # Fetch all messages for this broadcast
@@ -113,6 +114,15 @@ async def delete_broadcast_worker(broadcast_id: int):
             await asyncio.sleep(0.03) # Rate limit for deletion
             
         logger.info(f"Deleted {deleted_count} messages for broadcast {broadcast_id}")
+
+        if delete_record:
+            # Delete the broadcast record itself
+            result = await session.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
+            broadcast = result.scalar_one_or_none()
+            if broadcast:
+                await session.delete(broadcast)
+                await session.commit()
+                logger.info(f"Deleted broadcast record {broadcast_id} from DB")
 
 async def edit_broadcast_worker(broadcast_id: int, new_text: str, new_type: str = None, new_file_id: str = None):
     """

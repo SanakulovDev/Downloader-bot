@@ -200,15 +200,9 @@ class BroadcastView(BaseView):
              return RedirectResponse(url="/admin/broadcast", status_code=303)
         try:
             broadcast_id = int(request.path_params["broadcast_id"])
-            from utils.db_api.database import async_session
-            from sqlalchemy import select
-            
-            async with async_session() as session:
-                 result = await session.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
-                 broadcast = result.scalar_one_or_none()
-                 if broadcast:
-                     await session.delete(broadcast)
-                     await session.commit()
+            from utils.broadcast_worker import delete_broadcast_worker
+            # Trigger worker to delete messages AND the record
+            asyncio.create_task(delete_broadcast_worker(broadcast_id, delete_record=True))
                      
             return RedirectResponse(url="/admin/broadcast", status_code=303)
         except Exception as e:

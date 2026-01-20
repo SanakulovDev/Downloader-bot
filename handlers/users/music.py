@@ -93,16 +93,83 @@ async def cmd_my_favorite(message: Message):
             pass
             
     # Sort or just list? Let's list. limiting to 50 maybe?
-    for song in decoded_likes[:50]:
+    # Sort or just list? Let's list. limiting to 30 to avoid hitting button limits (since we use 2 rows per item)
+    for song in decoded_likes[:30]:
+        # Row 1: Song Title
         keyboard.append([
             InlineKeyboardButton(
                 text=f"🎵 {song['title']}",
                 callback_data=f"music:{song['id']}" # Reuse music download handler
             )
         ])
+        # Row 2: Delete Button (Below)
+        keyboard.append([
+            InlineKeyboardButton(
+                text="❌ O'chirish",
+                callback_data=f"del_fav:{song['id']}"
+            )
+        ])
+    
+    # Add "Clear All" button at the bottom
+    keyboard.append([
+        InlineKeyboardButton(
+            text="🗑 Barchasini tozalash",
+            callback_data="del_fav_all"
+        )
+    ])
         
     kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
-    await message.answer("❤️ <b>Sizning sevimli musiqalaringiz:</b>", parse_mode='HTML', reply_markup=kb)
+    
+    # If called from callback (refresh), edit text. Else answer.
+    if isinstance(message, CallbackQuery):
+        await message.message.edit_text("❤️ <b>Sizning sevimli musiqalaringiz:</b>", parse_mode='HTML', reply_markup=kb)
+    else:
+        await message.answer("❤️ <b>Sizning sevimli musiqalaringiz:</b>", parse_mode='HTML', reply_markup=kb)
+
+@router.callback_query(F.data == 'del_fav_all')
+async def handle_delete_all_favorites(callback: CallbackQuery):
+    """Barcha sevimlilarni o'chirish"""
+    user_id = callback.from_user.id
+    from loader import redis_client
+    
+    if not redis_client:
+        await callback.answer("❌ Database error", show_alert=True)
+        return
+        
+    # Delete the entire set
+    await redis_client.delete(f"user:{user_id}:likes")
+    
+    await callback.answer("🧹 Barcha musiqalar o'chirildi!")
+    await callback.message.edit_text("🤷‍♂️ Sizda hali sevimli musiqalar yo'q.")
+
+@router.callback_query(F.data.startswith('del_fav:'))
+async def handle_delete_favorite(callback: CallbackQuery):
+    """Sevimlilardan o'chirish"""
+    video_id = callback.data.split(':')[1]
+    user_id = callback.from_user.id
+    from loader import redis_client
+    
+    if not redis_client:
+        await callback.answer("❌ Database error", show_alert=True)
+        return
+
+    # Find the full item to delete (id|title)
+    likes = await redis_client.smembers(f"user:{user_id}:likes")
+    item_to_delete = None
+    
+    for item in likes:
+        item_str = item.decode() if isinstance(item, bytes) else item
+        if item_str.startswith(f"{video_id}|") or item_str == video_id:
+            item_to_delete = item
+            break
+            
+    if item_to_delete:
+        await redis_client.srem(f"user:{user_id}:likes", item_to_delete)
+        await callback.answer("✅ O'chirildi!")
+        # Refresh list
+        await cmd_my_favorite(callback)
+    else:
+        await callback.answer("⚠️ Topilmadi", show_alert=True)
 
 @router.callback_query(F.data.startswith('like:'))
 async def handle_like(callback: CallbackQuery):
