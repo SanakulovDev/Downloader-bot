@@ -6,8 +6,8 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
-    ports:
-      - "6390:6390"
+    # ports:
+    #   - "6390:6390"
 
   postgres:
     image: postgres:15-alpine

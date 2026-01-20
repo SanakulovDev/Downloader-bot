@@ -22,6 +22,7 @@ async def search_music(query: str):
 
     ydl_opts = {
         'quiet': True,
+        'cookiefile': '/app/app/cookies.txt',
         'extract_flat': 'in_playlist', # Only extract flat for playlists
         'noplaylist': True,
     }

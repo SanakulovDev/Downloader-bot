@@ -41,6 +41,7 @@ async def handle_recognize_music(callback: CallbackQuery):
             'outtmpl': str(temp_audio),
             'quiet': True,
             'max_filesize': 10 * 1024 * 1024, # 10MB yetadi
+            'cookiefile': '/app/app/cookies.txt',
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
