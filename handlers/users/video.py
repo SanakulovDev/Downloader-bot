@@ -37,14 +37,36 @@ async def handle_recognize_music(callback: CallbackQuery):
         url = f"https://www.youtube.com/watch?v={video_id}"
         
         ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio',
-            'outtmpl': str(temp_audio),
-            'quiet': True,
-            'max_filesize': 10 * 1024 * 1024, # 10MB yetadi
+            'format': 'bestaudio/best',
+            'outtmpl': str(temp_file),
+            
+            # Cookie turaversin, lekin Android klient bilan u yaxshiroq ishlashi mumkin
             'cookiefile': '/app/cookies.txt',
-        #    'username': os.getenv('YT_USERNAME', 'oauth2'), 
-        #    'password': os.getenv('YT_PASSWORD', ''),
-            'user_agent': os.getenv('USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3')
+            
+            # --- ENG MUHIM O'ZGARISH ---
+            # Biz o'zimizni "Android" (Samsung/Pixel) telefoni deb tanitamiz.
+            # Bu datacenter (server) IP bloklarini aylanib o'tishga yordam beradi.
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                }
+            },
+            # ---------------------------
+
+            'quiet': True,
+            'no_warnings': True,
+            'ignoreerrors': True,
+            'nocheckcertificate': True,
+            
+            # MP3 ga o'tkazish
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            
+            'concurrent_fragment_downloads': 5,
+            'http_chunk_size': 10485760,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

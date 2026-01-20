@@ -42,33 +42,36 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     # ... boshqa kodlaringiz ...
 
     ydl_opts = {
-        # 1. Format: Eng yaxshi audioni ol (m4a yoki webm farqi yo'q)
         'format': 'bestaudio/best',
         'outtmpl': str(temp_file),
         
-        # 2. Cookie fayli manzili (Docker ichidagi manzil)
+        # Cookie turaversin, lekin Android klient bilan u yaxshiroq ishlashi mumkin
         'cookiefile': '/app/cookies.txt',
         
-        # 3. Brauzerligimizni isbotlash (Headerlar) - BU JUDA MUHIM
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Sec-Fetch-Mode': 'navigate',
+        # --- ENG MUHIM O'ZGARISH ---
+        # Biz o'zimizni "Android" (Samsung/Pixel) telefoni deb tanitamiz.
+        # Bu datacenter (server) IP bloklarini aylanib o'tishga yordam beradi.
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+            }
         },
+        # ---------------------------
 
-        # 4. Xatoliklarni oldini olish
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': True,
-        'nocheckcertificate': True, # SSL xatolarini o'tkazib yuborish
+        'nocheckcertificate': True,
         
-        # 5. FFmpeg (WebM ni MP3 ga aylantirish uchun)
+        # MP3 ga o'tkazish
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
+        
+        'concurrent_fragment_downloads': 5,
+        'http_chunk_size': 10485760,
     }
         
     try:
