@@ -286,15 +286,15 @@ async def submit_support(data: SupportRequest):
 class SupportView(BaseView):
     name = "Support"
     icon = "fa-solid fa-envelope"
-    identity = "support_admin"
+    identity = "support_hub"
 
-    @expose("/", methods=["GET"])
+    @expose("/inbox", methods=["GET"])
     async def support_dashboard(self, request: Request):
         from starlette.templating import Jinja2Templates
         from sqlalchemy import select, desc
         from utils.db_api.database import async_session
         
-        # templates = Jinja2Templates(directory="templates") # BaseView has self.templates
+        # self.templates is available in BaseView
         
         async with async_session() as session:
             result = await session.execute(
@@ -315,7 +315,7 @@ class SupportView(BaseView):
         reply_text = form.get("reply_text")
         
         if not reply_text:
-            return RedirectResponse(url="/admin/support_admin/", status_code=303)
+            return RedirectResponse(url="/admin/support_hub/inbox", status_code=303)
             
         from utils.db_api.database import async_session
         from sqlalchemy import select, func
@@ -344,6 +344,6 @@ class SupportView(BaseView):
                     import logging
                     logging.error(f"Failed to send reply to {ticket.user_id}: {e}")
                     
-        return RedirectResponse(url="/admin/support_admin/", status_code=303)
+        return RedirectResponse(url="/admin/support_hub/inbox", status_code=303)
 
 admin.add_view(SupportView)
