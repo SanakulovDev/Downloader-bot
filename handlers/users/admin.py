@@ -89,15 +89,23 @@ async def admin_reply_to_support(message: Message):
     
     try:
         # 1. Send reply to user
-        await message.copy_to(chat_id=user_id)
-        
-        # Optional: Send a notification text too if needed, but copy_to sends the content nicely
-        await message.bot.send_message(
-            chat_id=user_id,
-            text="📨 <b>Admin javobi yuqorida</b>",
-            parse_mode="HTML",
-            reply_to_message_id=message.message_id  # This won't work across chats, just separate msg
-        )
+        if message.text:
+            await message.bot.send_message(
+                chat_id=user_id,
+                text=f"📨 <b>Admin javobi:</b>\n\n{message.text}",
+                parse_mode="HTML"
+            )
+        else:
+            # For media, we try to add the caption
+            try:
+                await message.copy_to(
+                    chat_id=user_id, 
+                    caption=f"📨 <b>Admin javobi:</b>\n\n{message.caption or ''}",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                # Fallback if caption editing fails (e.g. incompatible media)
+                await message.copy_to(chat_id=user_id)
 
         # 2. Update DB ticket status
         async with db() as session:
@@ -116,9 +124,8 @@ async def admin_reply_to_support(message: Message):
                 ticket.replied_at = func.now()
                 ticket.status = "resolved"
                 await session.commit()
-                await message.reply("✅ Javob yuborildi va ticket yopildi.")
-            else:
-                await message.reply("✅ Javob yuborildi (lekin ochiq ticket topilmadi).")
+                
+        await message.reply("✅ Yuborildi.")
                 
     except Exception as e:
         await message.reply(f"❌ Xatolik: {e}")
