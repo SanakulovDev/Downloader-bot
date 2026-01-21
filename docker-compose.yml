@@ -10,6 +10,8 @@ services:
       # YANGI: Redis ma'lumotlari 'redis_data_dir'ga tushadi
       - ./redis_data_dir:/data
     command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
     
   postgres:
     image: postgres:15-alpine

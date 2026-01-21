@@ -18,3 +18,4 @@ downloads/
 cookies.txt
 pg_data
 redis_data_dir
+ngrok.log
