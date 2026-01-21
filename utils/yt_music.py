@@ -68,6 +68,7 @@ class YouTubeMusicService:
                 return []
 
             results = []
+            seen_tracks = set()
             for track in search_results:
                 if 'videoId' not in track:
                     continue
@@ -83,6 +84,42 @@ class YouTubeMusicService:
                         duration_seconds = parts[0] * 3600 + parts[1] * 60 + parts[2]
                 except:
                     pass
+
+                # --- YANGI: Relevatlik tekshiruvi ---
+                # Qidiruv so'zi (yoki uning qismlari) pamagat yoki artistda bo'lishi shart
+                q_words = query.lower().split()
+                text_to_check = (track.get('title', '') + " " + ", ".join([a['name'] for a in track.get('artists', [])])).lower()
+                
+                # Agar qidiruv so'zidagi hech bo'lmasa bitta asosiy so'z qatnashmasa -> tashlab yuboramiz
+                # (Juda qattiq qilmaslik uchun "any" ishlatamiz, lekin "all" aniqroq bo'ladi. 
+                # Foydalanuvchi "Bojalar" dedi, demak "Bojalar" so'zi bo'lishi shart)
+                
+                is_relevant = False
+                # Agar to'liq query matn ichida bo'lsa
+                if query.lower() in text_to_check:
+                    is_relevant = True
+                else:
+                    # Yoki so'zma-so'z tekshiramiz (kamida bitta so'z, 3 harfdan uzun bo'lsa)
+                    for word in q_words:
+                        if len(word) > 2 and word in text_to_check:
+                            is_relevant = True
+                            break
+                            
+                if not is_relevant:
+                    continue
+                # -------------------------------------
+
+                # --- YANGI: Dublikatlarni o'chirish ---
+                # Ba'zan bir xil qo'shiq (albomi boshqa bo'lsa ham) takrorlanadi
+                # Biz Title + Artist + Duration bo'yicha unikal qilamiz
+                unique_key = (track.get('title'), track.get('duration')) 
+                # Artistni qo'shmayapmiz, chunki ba'zan "Artist" va "Artist VEVO" bo'lib qoladi, 
+                # lekin Title va Duration bir xil bo'lsa bu 99% bir xil qo'shiq.
+                
+                if unique_key in seen_tracks:
+                    continue
+                seen_tracks.add(unique_key)
+                # --------------------------------------
 
                 results.append({
                     "id": track.get('videoId'),

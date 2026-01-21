@@ -416,3 +416,87 @@ class SupportView(BaseView):
         return RedirectResponse(url="/admin/support/inbox", status_code=303)
 
 admin.add_view(SupportView)
+
+# --- Redis Cache Dashboard ---
+class CacheView(BaseView):
+    name = "Cache"
+    icon = "fa-solid fa-server"
+    identity = "cache_home"
+
+    @expose("/cache", methods=["GET"])
+    async def cache_dashboard(self, request: Request):
+        from loader import redis_client
+        
+        redis_connected = False
+        memory_human = "N/A"
+        db_size = 0
+        error = None
+        
+        if redis_client:
+            try:
+                info = await redis_client.info(section="memory")
+                memory_human = info.get("used_memory_human", "N/A")
+                db_size = await redis_client.dbsize()
+                redis_connected = True
+            except Exception as e:
+                error = f"Redis Error: {e}"
+        else:
+            error = "Redis client not initialized"
+
+        return await self.templates.TemplateResponse(request, "cache.html", context={
+            "redis_connected": redis_connected,
+            "memory_human": memory_human,
+            "db_size": db_size,
+            "error": error
+        })
+
+    @expose("/cache/clear", methods=["POST"])
+    async def clear_cache(self, request: Request):
+        from loader import redis_client
+        
+        form = await request.form()
+        action_type = form.get("action_type")
+        
+        message = ""
+        error = ""
+        
+        if not redis_client:
+             return await self.templates.TemplateResponse(request, "cache.html", context={"error": "Redis Not Connected"})
+
+        try:
+            if action_type == "all":
+                await redis_client.flushdb()
+                message = "✅ All keys flushed from database!"
+            
+            elif action_type == "search":
+                # Scan for search keys
+                keys = []
+                async for key in redis_client.scan_iter("search:*"):
+                    keys.append(key)
+                
+                # Also video cache
+                async for key in redis_client.scan_iter("video:*"):
+                    keys.append(key)
+                    
+                if keys:
+                     await redis_client.delete(*keys)
+                     message = f"✅ Deleted {len(keys)} search/video cache keys."
+                else:
+                     message = "⚠️ No search keys found to delete."
+            
+            # Refresh stats
+            info = await redis_client.info(section="memory")
+            memory_human = info.get("used_memory_human", "N/A")
+            db_size = await redis_client.dbsize()
+            
+            return await self.templates.TemplateResponse(request, "cache.html", context={
+                "message": message,
+                "redis_connected": True,
+                "memory_human": memory_human,
+                "db_size": db_size
+            })
+            
+        except Exception as e:
+            return await self.templates.TemplateResponse(request, "cache.html", context={"error": f"Error: {e}"})
+
+admin.add_view(CacheView)

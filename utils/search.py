@@ -12,7 +12,7 @@ async def search_music(query: str):
     from utils.yt_music import yt_music_service
     
     # 1. Check Cache
-    cache_key = f"search:music:v2:{query.lower().strip()}" # Changed key prefix to separate from old video search if needed, or keep same. Let's use new key to avoid conflicts.
+    cache_key = f"search:music:v3:{query.lower().strip()}" # Changed key prefix to separate from old video search if needed, or keep same. Let's use new key to avoid conflicts.
     try:
         if redis_client:
             cached_data = await redis_client.get(cache_key)
@@ -24,7 +24,7 @@ async def search_music(query: str):
 
     try:
         # Search via YTMusic
-        results = await yt_music_service.search_songs(query, limit=20)
+        results = await yt_music_service.search_songs(query, limit=50)
         
         final_results = []
         for r in results:
