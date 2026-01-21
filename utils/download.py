@@ -138,13 +138,16 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
             if result and os.path.exists(result):
                 return result
 
-        # YOUTUBE
+        # YOUTUBE formatini Shorts va har xil sifatlarga moslab yangilash
         ydl_opts = {
             **COMMON_OPTS,
-            'format': 'bestvideo[height<=480]+bestaudio/best[height<=480]',
+            # 1. 480p gacha bo'lgan eng yaxshi mp4 video + audio
+            # 2. Agar u bo'lmasa, shunchaki 480p gacha bo'lgan eng yaxshi format
+            # 3. Agar u ham bo'lmasa, har qanday eng yaxshi mp4
+            'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best',
             'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
-            'max_filesize': 2 * 1024 * 1024 * 1024, # 2GB limit attempt
+            'max_filesize': 2 * 1024 * 1024 * 1024,
         }
 
         logger.info(f"Downloading Video: {url}")
