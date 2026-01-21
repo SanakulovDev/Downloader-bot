@@ -70,12 +70,8 @@ async def process_video_task(chat_id, url, msgs):
             except:
                 pass
     finally:
-        if video_path and os.path.exists(video_path):
-            try:
-                os.remove(video_path)
-                logger.info(f"Deleted temp file: {video_path}")
-            except Exception as e:
-                logger.error(f"Error deleting file {video_path}: {e}")
+        pass
+
 
 async def process_music_task(chat_id, video_id, callback: CallbackQuery):
     try:
@@ -116,12 +112,7 @@ async def process_music_task(chat_id, video_id, callback: CallbackQuery):
              
         await callback.message.answer(err_text)
     finally:
-        if audio_path and os.path.exists(audio_path):
-            try:
-                os.remove(audio_path)
-                logger.info(f"Deleted temp file: {audio_path}")
-            except Exception as e:
-                logger.error(f"Error deleting file {audio_path}: {e}")
+        pass
 
 async def download_worker(worker_id: int):
     logger.info(f"Worker {worker_id} started")

@@ -180,7 +180,7 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
 
         if redis_client:
             try:
-                await redis_client.setex(f"video:{url_hash}", 3600, str(downloaded_file).encode())
+                await redis_client.setex(f"video:{url_hash}", 86400, str(downloaded_file).encode())
             except:
                 pass
         

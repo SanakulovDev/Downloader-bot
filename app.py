@@ -51,6 +51,11 @@ async def main():
     # Start Workers
     workers = await start_workers()
     
+    # Start Cleanup Worker
+    from utils.cleanup import cleanup_worker
+    cleanup_task = asyncio.create_task(cleanup_worker())
+    workers.append(cleanup_task)
+    
     # Register Middleware
     from utils.middlewares.activity import ActivityMiddleware
     dp.update.middleware(ActivityMiddleware())
