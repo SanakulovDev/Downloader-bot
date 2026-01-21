@@ -138,11 +138,11 @@ async def handle_video_logic(message: Message, url: str):
     """
     chat_id = message.chat.id
     
-    status_msg = await message.answer(f"🎬 So'rov qabul qilindi...", parse_mode='HTML')
+    status_msg = await message.reply(f"⏳ <b>Video yuklanmoqda...</b>", parse_mode='HTML')
     
     # Queue ga qo'shish
-    position = DOWNLOAD_QUEUE.qsize() + 1
-    await status_msg.edit_text(f"⏳ <b>Navbatga qo'shildi!</b>\nSizning o'rningiz: {position}", parse_mode='HTML')
+    # position = DOWNLOAD_QUEUE.qsize() + 1
+    # await status_msg.edit_text(f"⏳ <b>Navbatga qo'shildi!</b>\nSizning o'rningiz: {position}", parse_mode='HTML')
     
     # Queue handler o'zi `utils/download.py` dagi funksiyani chaqiradi
     await DOWNLOAD_QUEUE.put(('video', chat_id, url, message))

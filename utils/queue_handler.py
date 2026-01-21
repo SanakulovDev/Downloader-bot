@@ -13,21 +13,21 @@ DOWNLOAD_QUEUE = asyncio.Queue()
 MAX_CONCURRENT_DOWNLOADS = 2
 
 async def process_video_task(chat_id, url, message: Message):
-    status_msg = await message.answer("⏳ <b>Navbat keldi, yuklab olinmoqda...</b>", parse_mode='HTML')
+    # status_msg = await message.answer("⏳ <b>Navbat keldi, yuklab olinmoqda...</b>", parse_mode='HTML')
     video_path = None
     try:
         video_path = await download_video(url, chat_id)
         if video_path:
-            await message.answer_video(
+            await message.reply_video(
                 FSInputFile(video_path),
                 caption="🤖 " + os.getenv("TELEGRAM_NICKNAME")
             )
-            await status_msg.delete()
+            # await status_msg.delete()
         else:
-            await status_msg.edit_text("❌ Video yuklab bo'lmadi.")
+            await message.reply("❌ Video yuklab bo'lmadi.")
     except Exception as e:
         logger.error(f"Video task error: {e}")
-        await status_msg.edit_text("❌ Xatolik yuz berdi!")
+        await message.reply("❌ Xatolik yuz berdi!")
     finally:
         if video_path and os.path.exists(video_path):
             try:
@@ -38,7 +38,7 @@ async def process_video_task(chat_id, url, message: Message):
 
 async def process_music_task(chat_id, video_id, callback: CallbackQuery):
     try:
-        await callback.message.edit_text("⏳ <b>Navbat keldi, yuklab olinmoqda...</b>", parse_mode='HTML')
+        await callback.message.edit_text("⏳ <b>Yuklanmoqda...</b>", parse_mode='HTML')
     except:
         pass
 
