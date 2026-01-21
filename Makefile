@@ -28,7 +28,7 @@ exec:
 restart: down up
 
 pro:
-	git pull origin main && make restart && make logs
+	clear && git pull origin main && make restart && make logs
 
 clean:
 	$(DOCKER_COMPOSE) down -v

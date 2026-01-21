@@ -112,7 +112,7 @@ async def process_music_task(chat_id, video_id, msg_obj):
             
             await callback.message.answer_audio(
                 FSInputFile(audio_path, filename=filename),
-                caption=f"🎵 {filename.replace('.m4a', '')} \n🤖 @qishloqlik_devbot",
+                caption=f"🎵 {filename.replace('.m4a', '')} \n🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot"),
                 title=filename.replace('.m4a', ''),
                 reply_markup=keyboard
             )
