@@ -227,6 +227,8 @@ for q_text, options, correct_opt_char in all_questions_data:
 
     doc.add_paragraph() # Spacer
 
-final_path = "/mnt/data/Asalarichilik_Barcha_Testlar.docx"
+# Fayl nomining o'zi kifoya (papka shart emas)
+final_path = "Asalarichilik_Barcha_Testlar.docx"
 doc.save(final_path)
-final_path
+
+print(f"Fayl muvaffaqiyatli saqlandi: {final_path}")
