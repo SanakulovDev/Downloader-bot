@@ -20,7 +20,7 @@ async def process_video_task(chat_id, url, message: Message):
         if video_path:
             await message.answer_video(
                 FSInputFile(video_path),
-                caption="🤖 @qishloqlik_devbot"
+                caption="🤖 " + os.getenv("TELEGRAM_NICKNAME")
             )
             await status_msg.delete()
         else:
