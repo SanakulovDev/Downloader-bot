@@ -120,7 +120,7 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
         # YOUTUBE
         ydl_opts = {
             **COMMON_OPTS,
-            'format': 'best',
+            'format': 'bestvideo[height<=480]+bestaudio/best[height<=480]',
             'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
             'max_filesize': 2 * 1024 * 1024 * 1024,
