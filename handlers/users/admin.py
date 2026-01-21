@@ -63,3 +63,62 @@ async def broadcast_message(message: Message, state: FSMContext):
         await message.answer(f"Error during broadcast: {e}")
         
     await state.clear()
+
+
+from aiogram import F
+from utils.db_api.models import SupportTicket
+from sqlalchemy import func
+import re
+
+@router.message(F.reply_to_message, IsAdmin())
+async def admin_reply_to_support(message: Message):
+    reply = message.reply_to_message
+    
+    # Validation: Check if it's a support notification
+    if not (reply.text and "Yangi Murojaat!" in reply.text):
+        return
+
+    # Extract User ID
+    match = re.search(r"🆔 ID: (\d+)", reply.text) or re.search(r"ID: <code>(\d+)</code>", reply.text) or re.search(r"ID: (\d+)", reply.text)
+    
+    if not match:
+        await message.reply("❌ Foydalanuvchi ID si topilmadi.")
+        return
+        
+    user_id = int(match.group(1))
+    
+    try:
+        # 1. Send reply to user
+        await message.copy_to(chat_id=user_id)
+        
+        # Optional: Send a notification text too if needed, but copy_to sends the content nicely
+        await message.bot.send_message(
+            chat_id=user_id,
+            text="📨 <b>Admin javobi yuqorida</b>",
+            parse_mode="HTML",
+            reply_to_message_id=message.message_id  # This won't work across chats, just separate msg
+        )
+
+        # 2. Update DB ticket status
+        async with db() as session:
+            # Find the latest open ticket for this user
+            result = await session.execute(
+                select(SupportTicket)
+                .where(SupportTicket.user_id == user_id)
+                .where(SupportTicket.status == 'open')
+                .order_by(SupportTicket.created_at.desc())
+                .limit(1)
+            )
+            ticket = result.scalar_one_or_none()
+            
+            if ticket:
+                ticket.admin_reply = message.text or "[Media Message]"
+                ticket.replied_at = func.now()
+                ticket.status = "resolved"
+                await session.commit()
+                await message.reply("✅ Javob yuborildi va ticket yopildi.")
+            else:
+                await message.reply("✅ Javob yuborildi (lekin ochiq ticket topilmadi).")
+                
+    except Exception as e:
+        await message.reply(f"❌ Xatolik: {e}")
