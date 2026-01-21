@@ -125,7 +125,5 @@ async def admin_reply_to_support(message: Message):
                 ticket.status = "resolved"
                 await session.commit()
                 
-        await message.reply("✅ Yuborildi.")
-                
     except Exception as e:
         await message.reply(f"❌ Xatolik: {e}")
