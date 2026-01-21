@@ -11,9 +11,9 @@ from utils.validation import is_instagram_url, is_youtube_url
 
 logger = logging.getLogger(__name__)
 
-# --- FIX: REMOTE COMPONENTS + WEB CLIENT ---
+# --- FIX: LIST FORMAT FOR REMOTE COMPONENTS ---
 COMMON_OPTS = {
-    # 1. Cookie fayli (Web brauzerdan olingan)
+    # 1. Cookie fayli
     'cookiefile': '/app/cookies.txt',
     
     # 2. IPv6
@@ -21,19 +21,18 @@ COMMON_OPTS = {
     'force_ipv6': True,
 
     # 3. MIJOZ: WEB
-    # Cookie faylingiz Web brauzerniki, shuning uchun klient ham Web bo'lishi shart.
     'extractor_args': {
         'youtube': {
             'player_client': ['web'],
         }
     },
     
-    # 4. REMOTE COMPONENTS (SIZ TOPGAN YECHIM)
-    # Bu opsiya yt-dlp ga JS challenge-ni yechish uchun kerakli
-    # tashqi komponentlarni (ejs) yuklab olishga ruxsat beradi.
-    'remote_components': {'ejs': 'github'},
+    # 4. REMOTE COMPONENTS (TUZATILDI: LIST FORMATI)
+    # Oldingi xato: {'ejs': 'github'} (Dict)
+    # To'g'ri variant: ['ejs:github'] (List)
+    'remote_components': ['ejs:github'],
 
-    # 5. User Agent (Cookie bilan moslik uchun)
+    # 5. User Agent
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 
     'quiet': True,
@@ -46,34 +45,29 @@ COMMON_OPTS = {
 async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Optional[str]]:
     """Music yuklab olish - MP3"""
     url = f"https://www.youtube.com/watch?v={video_id}"
-    final_path = Path(TMP_DIR) / f"{video_id}.mp3"
+    # Oldingi .mp3 tekshiruvini olib tashlaymiz
+    # final_path = Path(TMP_DIR) / f"{video_id}.mp3" 
     
-    if final_path.exists() and final_path.stat().st_size > 0:
-        return str(final_path), f"Audio_{video_id}.mp3"
+    # 1. Keshni (hozircha mp3 ga) tekshirish (agar oldin yuklangan bo'lsa)
+    # Agar biz dinamik formatga o'tsak, keshlash mantig'ini ham o'zgartirish kerak.
+    # Hozircha oddiy qoldiramiz: Har doim yangisini yuklayversin yoki faylni qidirsin.
 
     ydl_opts = {
         **COMMON_OPTS,
-        
-        # FORMAT:
-        # Endi JS challenge yechilgani uchun, biz yana jasurlik bilan
-        # 'bestaudio/best' ni ishlata olamiz. 
-        # Agar toza audio (m4a) bo'lsa uni oladi, bo'lmasa 18-formatni (mp4) olib audiosini ajratadi.
-        'format': 'bestaudio/best',
+        # 'bestaudio[ext=m4a]' -> M4A ni majburlash (Telegram uchun eng yaxshisi)
+        # Agar bo'lmasa oddiy bestaudio
+        'format': 'bestaudio[ext=m4a]/bestaudio/best',
         
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
         
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
+        # Postprocessor (FFmpeg) O'CHIRILDI -> Tezlik 10x oshadi
     }
 
     title = "Audio"
     author = "Unknown"
 
     try:
-        logger.info(f"Downloading Audio (Web + RemoteComponents): {url}")
+        logger.info(f"Downloading Audio (Fast Mode): {url}")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, url, download=True)
@@ -83,8 +77,16 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
             
         clean_title = f"{title} - {author}".replace('/', '-').replace('\\', '-')
         
-        if final_path.exists() and final_path.stat().st_size > 0:
-            return str(final_path), f"{clean_title}.mp3"
+        # Faylni qidiramiz (chunki u .m4a, .webm va hokazo bo'lishi mumkin)
+        # video_id.* bo'yicha glob qilamiz
+        downloaded_file = None
+        for file in Path(TMP_DIR).glob(f"{video_id}.*"):
+            if file.is_file() and not file.name.endswith('.part'):
+                downloaded_file = file
+                break
+        
+        if downloaded_file:
+            return str(downloaded_file), f"{clean_title}{downloaded_file.suffix}"
             
     except Exception as e:
         logger.error(f"Audio download error: {e}")
@@ -118,7 +120,6 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
         # YOUTUBE
         ydl_opts = {
             **COMMON_OPTS,
-            # JS challenge yechilgach, 'best' formati aniq ishlaydi (u 18-formatni topadi).
             'format': 'best',
             'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
