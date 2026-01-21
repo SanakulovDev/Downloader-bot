@@ -73,9 +73,28 @@ async def process_video_task(chat_id, url, msgs):
         pass
 
 
-async def process_music_task(chat_id, video_id, callback: CallbackQuery):
+async def process_music_task(chat_id, video_id, msg_obj):
+    callback = None
+    status_msg = None
+    is_media = False
+    
+    if isinstance(msg_obj, dict):
+        callback = msg_obj.get('callback')
+        status_msg = msg_obj.get('status_msg')
+        is_media = msg_obj.get('is_media', False)
+    else:
+        callback = msg_obj
+        
     try:
-        await callback.message.edit_text("⏳ <b>Yuklanmoqda...</b>", parse_mode='HTML')
+        # Only edit text if it's NOT a media message (search result w/ buttons)
+        if not is_media:
+            await callback.message.edit_text("⏳ <b>Yuklanmoqda...</b>", parse_mode='HTML')
+        elif status_msg:
+             # If we have a separate status message (reply), edit that instead
+             try:
+                 await status_msg.edit_text("⏳ <b>Yuklanmoqda...</b>", parse_mode='HTML')
+             except:
+                 pass
     except:
         pass
 
@@ -97,20 +116,40 @@ async def process_music_task(chat_id, video_id, callback: CallbackQuery):
                 title=filename.replace('.m4a', ''),
                 reply_markup=keyboard
             )
-            try:
-                await callback.message.delete()
-            except:
-                pass
+            
+            # Delete original message ONLY if it's not a media message (i.e., delete search results, keep video)
+            if not is_media:
+                try:
+                    await callback.message.delete()
+                except:
+                    pass
+            
+            # Helper status message deletion
+            if status_msg:
+                try:
+                    await status_msg.delete()
+                except:
+                    pass
         else:
-            await callback.message.edit_text("❌ Musiqa yuklashda xatolik bo'ldi.")
+            if status_msg:
+                 await status_msg.edit_text("❌ Musiqa yuklashda xatolik bo'ldi.")
+            elif not is_media:
+                 await callback.message.edit_text("❌ Musiqa yuklashda xatolik bo'ldi.")
     except Exception as e:
         logger.error(f"Music task error: {e}")
         
         err_text = str(e)
         if "❌" not in err_text:
              err_text = "❌ Yuborishda xatolik yuz berdi!"
+        
+        # Where to send error?
+        if status_msg:
+            await status_msg.edit_text(err_text)
+        elif not is_media:
+            await callback.message.answer(err_text)
+        else:
+             await callback.message.answer(err_text) # Fallback reply
              
-        await callback.message.answer(err_text)
     finally:
         pass
 

@@ -250,13 +250,41 @@ async def handle_music_pagination(callback: CallbackQuery, state: FSMContext):
 async def handle_music_callback(callback: CallbackQuery):
     """Musiqa yuklab olish tugmasi bosilganda"""
     video_id = callback.data.split(':')[1]
+    
+    # Check if this is a video/media message or text message
+    is_media = False
+    try:
+        # If it has video/photo/audio/document attribute populated
+        if callback.message.video or callback.message.photo or callback.message.audio or callback.message.document:
+            is_media = True
+    except:
+        pass
+        
     await callback.answer("⏳ Musiqa yuklanmoqda...", show_alert=False)
     
     # Queue ga qo'shish
     position = DOWNLOAD_QUEUE.qsize() + 1
-    await callback.message.edit_text(f"⏳ <b>Navbatga qo'shildi...</b>\nSizning navbatingiz: {position}", parse_mode='HTML')
+    status_msg = None
     
-    await DOWNLOAD_QUEUE.put(('music', callback.message.chat.id, video_id, callback))
+    try:
+        if is_media:
+            # Reply to the video message
+            status_msg = await callback.message.reply(f"⏳ <b>Navbatga qo'shildi...</b>\nSizning navbatingiz: {position}", parse_mode='HTML')
+        else:
+            # Edit text (search result)
+            await callback.message.edit_text(f"⏳ <b>Navbatga qo'shildi...</b>\nSizning navbatingiz: {position}", parse_mode='HTML')
+    except Exception as e:
+        # Fallback
+        logger.error(f"Error updating status: {e}")
+    
+    # Prepare task object
+    task_obj = {
+        'callback': callback,
+        'status_msg': status_msg,
+        'is_media': is_media
+    }
+    
+    await DOWNLOAD_QUEUE.put(('music', callback.message.chat.id, video_id, task_obj))
 
 @router.callback_query(F.data == 'delete_this_msg')
 async def handle_delete_message_callback(callback: CallbackQuery):
