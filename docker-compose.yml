@@ -6,11 +6,11 @@ services:
     container_name: downloader_redis
     restart: always
     volumes:
-      - redis_data:/data
+      # ESKI: - redis_data:/data
+      # YANGI: Redis ma'lumotlari 'redis_data_dir'ga tushadi
+      - ./redis_data_dir:/data
     command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"  # <-- OCHILDI: Host rejimdagi bot ulanishi uchun kerak
-
+    
   postgres:
     image: postgres:15-alpine
     container_name: downloader_db
@@ -18,7 +18,9 @@ services:
     env_file:
       - ./app/.env
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # ESKI: - postgres_data:/var/lib/postgresql/data
+      # YANGI: Ma'lumotlar papkangiz ichidagi 'pg_data'ga tushadi
+      - ./pg_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
 

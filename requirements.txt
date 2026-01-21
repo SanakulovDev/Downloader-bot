@@ -11,3 +11,4 @@ sqladmin
 itsdangerous
 python-multipart
 jinja2
+ytmusicapi
