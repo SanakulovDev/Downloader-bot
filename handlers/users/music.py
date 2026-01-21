@@ -257,3 +257,11 @@ async def handle_music_callback(callback: CallbackQuery):
     await callback.message.edit_text(f"⏳ <b>Navbatga qo'shildi...</b>\nSizning navbatingiz: {position}", parse_mode='HTML')
     
     await DOWNLOAD_QUEUE.put(('music', callback.message.chat.id, video_id, callback))
+
+@router.callback_query(F.data == 'delete_this_msg')
+async def handle_delete_message_callback(callback: CallbackQuery):
+    """Xabar o'chirish tugmasi bosilganda"""
+    try:
+        await callback.message.delete()
+    except Exception as e:
+        await callback.answer("❌ O'chirib bo'lmadi", show_alert=True)

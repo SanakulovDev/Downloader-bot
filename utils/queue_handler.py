@@ -4,6 +4,8 @@ import os
 from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+from utils.validation import extract_youtube_id, is_youtube_url
+
 from utils.download import download_video, download_audio
 
 logger = logging.getLogger(__name__)
@@ -25,9 +27,19 @@ async def process_video_task(chat_id, url, msgs):
     try:
         video_path = await download_video(url, chat_id)
         if video_path:
+            # Prepare keyboard if YouTube
+            keyboard = None
+            if is_youtube_url(url):
+                vid_id = extract_youtube_id(url)
+                if vid_id:
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🎵 Musiqasini yuklash", callback_data=f"music:{vid_id}")]
+                    ])
+
             await user_msg.reply_video(
                 FSInputFile(video_path),
-                caption="🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot")
+                caption="🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot"),
+                reply_markup=keyboard
             )
             
             # Delete status message if present
@@ -77,7 +89,10 @@ async def process_music_task(chat_id, video_id, callback: CallbackQuery):
         if audio_path:
             # Like button
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="❤️ Sevimlilarga qo'shish", callback_data=f"like:{video_id}")]
+                [
+                    InlineKeyboardButton(text="❤️ Sevimlilarga qo'shish", callback_data=f"like:{video_id}"),
+                    InlineKeyboardButton(text="❌", callback_data="delete_this_msg")
+                ]
             ])
             
             await callback.message.answer_audio(
