@@ -20,7 +20,7 @@ async def process_video_task(chat_id, url, message: Message):
         if video_path:
             await message.reply_video(
                 FSInputFile(video_path),
-                caption="🤖 " + os.getenv("TELEGRAM_NICKNAME")
+                caption="🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot")
             )
             # await status_msg.delete()
         else:
