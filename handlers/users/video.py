@@ -145,4 +145,4 @@ async def handle_video_logic(message: Message, url: str):
     # await status_msg.edit_text(f"⏳ <b>Navbatga qo'shildi!</b>\nSizning o'rningiz: {position}", parse_mode='HTML')
     
     # Queue handler o'zi `utils/download.py` dagi funksiyani chaqiradi
-    await DOWNLOAD_QUEUE.put(('video', chat_id, url, message))
+    await DOWNLOAD_QUEUE.put(('video', chat_id, url, {'user_msg': message, 'status_msg': status_msg}))

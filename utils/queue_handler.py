@@ -12,22 +12,51 @@ logger = logging.getLogger(__name__)
 DOWNLOAD_QUEUE = asyncio.Queue()
 MAX_CONCURRENT_DOWNLOADS = 2
 
-async def process_video_task(chat_id, url, message: Message):
-    # status_msg = await message.answer("⏳ <b>Navbat keldi, yuklab olinmoqda...</b>", parse_mode='HTML')
+async def process_video_task(chat_id, url, msgs):
+    # Backward compatibility or dict check
+    if isinstance(msgs, dict):
+        user_msg = msgs.get('user_msg')
+        status_msg = msgs.get('status_msg')
+    else:
+        user_msg = msgs
+        status_msg = None
+
     video_path = None
     try:
         video_path = await download_video(url, chat_id)
         if video_path:
-            await message.reply_video(
+            await user_msg.reply_video(
                 FSInputFile(video_path),
                 caption="🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot")
             )
-            # await status_msg.delete()
+            
+            # Delete status message if present
+            if status_msg:
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
         else:
-            await message.reply("❌ Video yuklab bo'lmadi.")
+            await user_msg.reply("❌ Video yuklab bo'lmadi.")
+            if status_msg:
+                try:
+                    await status_msg.delete()
+                except:
+                    pass
     except Exception as e:
         logger.error(f"Video task error: {e}")
-        await message.reply("❌ Xatolik yuz berdi!")
+        # Send the actual error message if it's one of ours, otherwise generic
+        err_text = str(e)
+        if "❌" not in err_text:
+             err_text = "❌ Yuklashda xatolik yuz berdi! (Keyinroq urinib ko'ring)"
+             
+        await user_msg.reply(err_text)
+        
+        if status_msg:
+            try:
+                await status_msg.delete()
+            except:
+                pass
     finally:
         if video_path and os.path.exists(video_path):
             try:
@@ -65,7 +94,12 @@ async def process_music_task(chat_id, video_id, callback: CallbackQuery):
             await callback.message.edit_text("❌ Musiqa yuklashda xatolik bo'ldi.")
     except Exception as e:
         logger.error(f"Music task error: {e}")
-        await callback.message.answer("❌ Yuborishda xatolik yuz berdi!")
+        
+        err_text = str(e)
+        if "❌" not in err_text:
+             err_text = "❌ Yuborishda xatolik yuz berdi!"
+             
+        await callback.message.answer(err_text)
     finally:
         if audio_path and os.path.exists(audio_path):
             try:
@@ -93,8 +127,15 @@ async def download_worker(worker_id: int):
             except Exception as e:
                 logger.error(f"Error processing task in worker {worker_id}: {e}")
                 try:
-                    target = msg_obj.message if isinstance(msg_obj, CallbackQuery) else msg_obj
-                    await target.answer("❌ Xatolik yuz berdi.")
+                    if isinstance(msg_obj, dict):
+                        target = msg_obj.get('user_msg')
+                    elif isinstance(msg_obj, CallbackQuery):
+                        target = msg_obj.message
+                    else:
+                        target = msg_obj
+                        
+                    if target:
+                        await target.answer("❌ Xatolik yuz berdi.")
                 except:
                     pass
             finally:

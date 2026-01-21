@@ -69,12 +69,27 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     try:
         logger.info(f"Downloading Audio (Fast Mode): {url}")
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = await asyncio.to_thread(ydl.extract_info, url, download=True)
-            if info:
-                title = info.get('title', 'Audio')
-                author = info.get('uploader', 'Unknown')
-            
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = await asyncio.to_thread(ydl.extract_info, url, download=True)
+                if info:
+                    title = info.get('title', 'Audio')
+                    author = info.get('uploader', 'Unknown')
+        except yt_dlp.utils.DownloadError as e:
+            err_msg = str(e).lower()
+            if "larger than" in err_msg or "too large" in err_msg:
+                 raise Exception("❌ Audio hajmi juda katta (2GB dan ortiq).")
+            elif "video unavailable" in err_msg or "private video" in err_msg:
+                 raise Exception("❌ Audio/Video topilmadi yoki o'chirilgan.")
+            elif "sign in" in err_msg or "age-gated" in err_msg:
+                 raise Exception("❌ Yosh cheklovi yoki login talab qilinadi.")
+            elif "copyright" in err_msg:
+                 raise Exception("❌ Mualliflik huquqi tufayli yuklab bo'lmadi.")
+            elif "geo-restricted" in err_msg or "available to" in err_msg:
+                 raise Exception("❌ Hududiy cheklov tufayli yuklanmaydi.")
+            else:
+                 raise e
+
         clean_title = f"{title} - {author}".replace('/', '-').replace('\\', '-')
         
         # Faylni qidiramiz (chunki u .m4a, .webm va hokazo bo'lishi mumkin)
@@ -90,6 +105,12 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
             
     except Exception as e:
         logger.error(f"Audio download error: {e}")
+        # Re-raise specific errors or return None?
+        # Let's return None for now as queue handler handles generic "None" as error, 
+        # but better to raise to show message.
+        # However, to avoid breaking changes let's try to map it if possible or just log.
+        # But user wants SPECIFIC message. So we SHOULD raise.
+        raise e 
         
     return None, None
 
@@ -123,12 +144,27 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
             'format': 'bestvideo[height<=480]+bestaudio/best[height<=480]',
             'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
-            'max_filesize': 2 * 1024 * 1024 * 1024,
+            'max_filesize': 2 * 1024 * 1024 * 1024, # 2GB limit attempt
         }
 
         logger.info(f"Downloading Video: {url}")
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            await asyncio.to_thread(ydl.download, [url])
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                await asyncio.to_thread(ydl.download, [url])
+        except yt_dlp.utils.DownloadError as e:
+            err_msg = str(e).lower()
+            if "larger than" in err_msg or "too large" in err_msg:
+                 raise Exception("❌ Video hajmi juda katta (2GB dan ortiq). Telegram orqali yuborib bo'lmaydi.")
+            elif "video unavailable" in err_msg or "private video" in err_msg:
+                 raise Exception("❌ Video topilmadi yoki o'chirilgan (Private).")
+            elif "sign in" in err_msg or "age-gated" in err_msg:
+                 raise Exception("❌ Bu video yosh cheklovi (18+) yoki login talab qiladi.")
+            elif "copyright" in err_msg:
+                 raise Exception("❌ Mualliflik huquqi tufayli yuklab bo'lmadi.")
+            elif "geo-restricted" in err_msg or "available to" in err_msg:
+                 raise Exception("❌ Bu video hududiy cheklov tufayli yuklanmaydi.")
+            else:
+                 raise e
 
         downloaded_file = None
         if temp_file.exists():
@@ -152,4 +188,4 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
 
     except Exception as e:
         logger.error(f"Video download error: {e}", exc_info=True)
-        return None
+        raise e # Re-raise to be caught by queue handler
