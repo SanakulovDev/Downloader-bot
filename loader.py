@@ -19,7 +19,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Bot Setup
-session = AiohttpSession(timeout=1800)
+from aiogram.client.telegram import TelegramAPIServer
+
+if settings.use_local_server:
+    session = AiohttpSession(
+        api=TelegramAPIServer.from_base(settings.local_server_url),
+        timeout=1800
+    )
+else:
+    session = AiohttpSession(timeout=1800)
+
 bot = Bot(token=BOT_TOKEN, session=session)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
