@@ -240,21 +240,42 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     max_size = 1 * 1024 * 1024 * 1024
     items = []
     seen = set()
+    audio_sel = "bestaudio[ext=m4a]/bestaudio"
     for fmt in formats:
-        if fmt.get("ext") != "mp4":
-            continue
-        if fmt.get("vcodec") == "none" or fmt.get("acodec") == "none":
+        # Faqat video streamlarni ko'rsatamiz
+        if fmt.get("vcodec") == "none":
             continue
         height = fmt.get("height")
         if not height:
             continue
+
+        # Telegram uchun eng yaxshi yo'l: MP4.
+        # 1080p+ ko'pincha video-only bo'ladi (acodec=none) — bunday paytda audio bilan merge qilamiz.
+        ext = fmt.get("ext")
+        if ext != "mp4":
+            continue
+
+        format_id = fmt.get("format_id")
+        if not format_id:
+            continue
+
+        # Agar progressive bo'lsa (audio+video), aynan o'sha format_id ni beramiz.
+        # Agar video-only bo'lsa, audio bilan birga selector yasaymiz.
+        if fmt.get("acodec") and fmt.get("acodec") != "none":
+            selector = str(format_id)
+        else:
+            selector = f"{format_id}+{audio_sel}"
+
         size = _estimate_size_bytes(fmt, duration)
         if size and size > max_size:
             continue
+
+        # Bir xil height uchun faqat bittasini ko'rsatamiz (eng birinchi topilganini)
         if height in seen:
             continue
         seen.add(height)
-        items.append((height, fmt.get("format_id"), size))
+
+        items.append((height, selector, size))
 
     items.sort(key=lambda x: x[0])
     if not items:
@@ -263,7 +284,7 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     format_lines = []
     buttons = []
     row = []
-    for height, format_id, size in items:
+    for height, format_selector, size in items:
         size_mb = "?"
         if size:
             size_mb = t("size_mb", lang, mb=round(size / (1024 * 1024)))
@@ -271,7 +292,7 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         row.append(
             InlineKeyboardButton(
                 text=f"{height}p",
-                callback_data=f"video_format:{info.get('id')}:{format_id}"
+                callback_data=f"video_format:{info.get('id')}:{format_selector}"
             )
         )
         if len(row) == 2:
@@ -298,6 +319,7 @@ async def _fetch_video_info(url: str) -> dict | None:
     def _extract() -> dict | None:
         ydl_opts = {
             **COMMON_OPTS,
+            'skip_download': True,
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,

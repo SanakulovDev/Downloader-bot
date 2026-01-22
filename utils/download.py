@@ -152,15 +152,20 @@ async def download_video(
         # YOUTUBE formatini Shorts va har xil sifatlarga moslab yangilash
         ydl_opts = {
             **COMMON_OPTS,
-            # 1. 480p gacha bo'lgan eng yaxshi mp4 video + audio
-            # 2. Agar u bo'lmasa, shunchaki 480p gacha bo'lgan eng yaxshi format
-            # 3. Agar u ham bo'lmasa, har qanday eng yaxshi mp4
+            # 1. 480p gacha bo'lgan MP4 (progressive) yoki video-only + audio merge.
             'format': (
                 format_id if format_id else
-                'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best'
+                # Default: 480p gacha bo'lgan MP4 (progressive) yoki video-only + audio merge.
+                'best[height<=480][ext=mp4]/bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
             ),
             'merge_output_format': 'mp4',
+            'postprocessors': [{
+                'key': 'FFmpegVideoRemuxer',
+                'preferedformat': 'mp4',
+            }],
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
+            'noplaylist': True,
+            'cachedir': False,
             'max_filesize': 2 * 1024 * 1024 * 1024,
         }
         if progress_hook:
