@@ -158,27 +158,51 @@ async def handle_video_logic(message: Message, url: str):
     lang = await get_user_lang(message.from_user.id, redis_client)
 
     if is_youtube_url(url):
-        # YouTube uchun format tanlashni butunlay o'chiramiz: mavjud bo'lgan eng yaxshi formatni yuklab olamiz.
-        # Preview chiqarsa ham, darhol navbatga qo'shamiz.
         initial_msg = await _send_fast_preview(bot, chat_id, url, lang)
-        status_message_id = initial_msg.message_id if initial_msg else None
+        info = await _fetch_video_info(url)
+        if not info:
+            if initial_msg:
+                await safe_edit_text(initial_msg, t("no_formats", lang))
+            else:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=t("no_formats", lang),
+                    disable_web_page_preview=True
+                )
+            return
 
-        # Agar preview yuborilmagan bo'lsa, oddiy status xabar yuboramiz.
-        if not status_message_id:
-            status_msg = await bot.send_message(
-                chat_id=chat_id,
-                text=t("video_loading", lang),
-                parse_mode='HTML',
-                disable_web_page_preview=True
-            )
-            status_message_id = status_msg.message_id
+        caption, keyboard = _build_format_message(info, lang)
+        if not keyboard:
+            if initial_msg:
+                await safe_edit_text(initial_msg, t("no_formats", lang))
+            else:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=t("no_formats", lang),
+                    disable_web_page_preview=True
+                )
+            return
 
-        process_video_task.delay(
-            chat_id=chat_id,
-            url=url,
-            status_message_id=status_message_id,
-            format_height=None
-        )
+        if initial_msg:
+            await _edit_preview_with_formats(bot, initial_msg, caption, keyboard)
+        else:
+            thumb = info.get("thumbnail")
+            if thumb:
+                await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=thumb,
+                    caption=caption,
+                    parse_mode='HTML',
+                    reply_markup=keyboard
+                )
+            else:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=caption,
+                    parse_mode='HTML',
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True
+                )
         return
 
     # Mijozning link xabarini o'chirish (preview ko'rsatilmasligi uchun)
@@ -231,23 +255,34 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         if ext != "mp4":
             continue
 
+        format_id = fmt.get("format_id")
+        if not format_id:
+            continue
+
+        # Agar progressive bo'lsa (audio+video), aynan o'sha format_id ni beramiz.
+        # Agar video-only bo'lsa, audio bilan birga selector yasaymiz.
+        if fmt.get("acodec") and fmt.get("acodec") != "none":
+            selector = str(format_id)
+        else:
+            selector = f"{format_id}+{audio_sel}"
+
         size = _estimate_size_bytes(fmt, duration)
         if size and size > max_size:
             continue
 
         # Bir xil height uchun bittasini ko'rsatamiz, mp4 mavjud bo'lsa mp4 ni afzal ko'ramiz.
-        # items ichida (height, size, ext) saqlaymiz.
+        # items ichida (height, selector, size, ext) saqlaymiz.
         if height in seen:
             # Agar oldin webm qo'shilgan bo'lsa, endi mp4 bo'lsa uni almashtiramiz
             if ext == "mp4":
-                for i, (h, sz, ex) in enumerate(items):
+                for i, (h, sel, sz, ex) in enumerate(items):
                     if h == height and ex != "mp4":
-                        items[i] = (height, size, ext)
+                        items[i] = (height, selector, size, ext)
                         break
             continue
         seen.add(height)
 
-        items.append((height, size, ext))
+        items.append((height, selector, size, ext))
 
     items.sort(key=lambda x: x[0])
     if not items:
@@ -256,7 +291,7 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     format_lines = []
     buttons = []
     row = []
-    for height, size, ext in items:
+    for height, selector, size, ext in items:
         size_mb = "?"
         if size:
             size_mb = t("size_mb", lang, mb=round(size / (1024 * 1024)))
@@ -264,7 +299,7 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         row.append(
             InlineKeyboardButton(
                 text=f"{height}p ({ext})",
-                callback_data=f"video_format:{info.get('id')}:{height}"
+                callback_data=f"video_format:{info.get('id')}:{selector}"
             )
         )
         if len(row) == 2:
@@ -368,10 +403,7 @@ async def handle_video_format(callback: CallbackQuery):
     if len(data) < 3:
         return
     video_id = data[1]
-    try:
-        format_height = int(data[2])
-    except ValueError:
-        return
+    format_selector = data[2]
     from loader import redis_client
     lang = await get_user_lang(callback.from_user.id, redis_client)
 
@@ -390,7 +422,7 @@ async def handle_video_format(callback: CallbackQuery):
         chat_id=callback.message.chat.id,
         url=url,
         status_message_id=callback.message.message_id,
-        format_height=format_height
+        format_selector=format_selector
     )
 
 @router.callback_query(F.data == 'delete_this_msg')

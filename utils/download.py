@@ -124,7 +124,7 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
 async def download_video(
     url: str,
     chat_id: int,
-    format_height: Optional[object] = None,
+    format_selector: Optional[str] = None,
     progress_hook: Optional[Callable[[dict], None]] = None
 ) -> Optional[str]:
     """Video yuklab olish"""
@@ -149,25 +149,13 @@ async def download_video(
             if result and os.path.exists(result):
                 return result
 
-        # NOTE:
-        # Ba'zi joylarda `download_video` 3-argument sifatida format selector string (masalan "137+bestaudio...")
-        # yuborilishi mumkin. Oldin bu qiymat `format_height` sifatida qabul qilinib, noto'g'ri `height=...` selector
-        # yasab qo'yardi va natijada: "Requested format is not available".
-        # Biz YouTube uchun format tanlashni o'chirganmiz, shuning uchun faqat haqiqiy int bo'lsa (legacy) ishlatamiz.
-        if isinstance(format_height, int) and format_height:
-            format_selector = (
-                f"bestvideo[height={format_height}]+bestaudio/"
-                f"best[height={format_height}]/best"
-            )
-        else:
-            # Eng ishonchli: mavjud bo'lgan eng yaxshi video+audio (yoki best)
-            format_selector = "bestvideo*+bestaudio/best"
+        format_selector = format_selector or "bestvideo*+bestaudio/best"
 
         # YOUTUBE formatini Shorts va har xil sifatlarga moslab yangilash
         ydl_opts = {
             **COMMON_OPTS,
             # Hech qanday formatni "majbur" qilmaymiz: mavjud bo'lgan eng yaxshi video+audio (yoki best) ni olamiz.
-            'format': format_selector,
+            'format': f"{format_selector}/best",
             # Telegram uchun MP4 konteynerga remux (re-encode emas).
             'postprocessors': [{
                 'key': 'FFmpegVideoRemuxer',
