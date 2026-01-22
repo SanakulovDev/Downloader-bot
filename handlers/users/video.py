@@ -285,6 +285,7 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
 async def _fetch_video_info(url: str) -> dict | None:
     def _extract() -> dict | None:
         ydl_opts = {
+            'cookiefile': '/app/cookies.txt',
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,
