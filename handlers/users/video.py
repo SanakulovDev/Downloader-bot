@@ -246,11 +246,7 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     max_size = 2 * 1024 * 1024 * 1024
     items = []
     seen = set()
-    audio_sel_mp4 = "bestaudio[ext=m4a]/bestaudio"
-    audio_sel_webm = "bestaudio[ext=webm]/bestaudio"
-    audio_exts = {fmt.get("ext") for fmt in formats if fmt.get("vcodec") == "none" and fmt.get("acodec")}
-    has_m4a = "m4a" in audio_exts or "mp4" in audio_exts
-    has_webm_audio = "webm" in audio_exts
+    audio_sel_any = "bestaudio/best"
     for fmt in formats:
         # Debug logging
         fid = fmt.get('format_id')
@@ -272,7 +268,7 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         # Telegram uchun odatda MP4 yaxshi, lekin ba'zi videolarda faqat WEBM bo'lishi mumkin.
         # Shuning uchun mp4/webm ikkalasini ham qabul qilamiz.
         ext = fmt.get("ext")
-        if ext not in {"mp4", "webm"}:
+        if ext not in {"mp4", "webm", "mkv"}:
             logger.info(f"Skipping {fid}: invalid ext {ext}")
             continue
 
@@ -285,16 +281,7 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         if fmt.get("acodec") and fmt.get("acodec") != "none":
             selector = str(format_id)
         else:
-            if ext == "mp4":
-                if not has_m4a:
-                    logger.info(f"Skipping {fid}: no compatible m4a audio")
-                    continue
-                selector = f"{format_id}+{audio_sel_mp4}"
-            else:
-                if not has_webm_audio:
-                    logger.info(f"Skipping {fid}: no compatible webm audio")
-                    continue
-                selector = f"{format_id}+{audio_sel_webm}"
+            selector = f"{format_id}+{audio_sel_any}"
 
         size = _estimate_size_bytes(fmt, duration)
         if size and size > max_size:
