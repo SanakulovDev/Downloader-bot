@@ -19,9 +19,11 @@ async def process_video_task(chat_id, url, msgs):
     if isinstance(msgs, dict):
         user_msg = msgs.get('user_msg')
         status_msg = msgs.get('status_msg')
+        original_chat_id = msgs.get('original_chat_id', chat_id)
     else:
         user_msg = msgs
         status_msg = None
+        original_chat_id = chat_id
 
     video_path = None
     try:
@@ -36,11 +38,21 @@ async def process_video_task(chat_id, url, msgs):
                         [InlineKeyboardButton(text="🎵 Musiqasini yuklash", callback_data=f"music:{vid_id}")]
                     ])
 
-            await user_msg.reply_video(
-                FSInputFile(video_path),
-                caption="🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot"),
-                reply_markup=keyboard
-            )
+            # Agar user_msg None bo'lsa (xabar o'chirilgan), bot.send_video() ishlatamiz
+            from loader import bot
+            if user_msg:
+                await user_msg.reply_video(
+                    FSInputFile(video_path),
+                    caption="🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot"),
+                    reply_markup=keyboard
+                )
+            else:
+                await bot.send_video(
+                    chat_id=original_chat_id,
+                    video=FSInputFile(video_path),
+                    caption="🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot"),
+                    reply_markup=keyboard
+                )
             
             # Delete status message if present
             if status_msg:
@@ -49,7 +61,13 @@ async def process_video_task(chat_id, url, msgs):
                 except Exception:
                     pass
         else:
-            await user_msg.reply("❌ Video yuklab bo'lmadi.")
+            # Xatolik xabarini yuborish
+            from loader import bot
+            if user_msg:
+                await user_msg.reply("❌ Video yuklab bo'lmadi.", disable_web_page_preview=True)
+            else:
+                await bot.send_message(chat_id=original_chat_id, text="❌ Video yuklab bo'lmadi.", disable_web_page_preview=True)
+            
             if status_msg:
                 try:
                     await status_msg.delete()
@@ -61,8 +79,13 @@ async def process_video_task(chat_id, url, msgs):
         err_text = str(e)
         if "❌" not in err_text:
              err_text = "❌ Yuklashda xatolik yuz berdi! (Keyinroq urinib ko'ring)"
-             
-        await user_msg.reply(err_text)
+        
+        # Xatolik xabarini yuborish
+        from loader import bot
+        if user_msg:
+            await user_msg.reply(err_text, disable_web_page_preview=True)
+        else:
+            await bot.send_message(chat_id=original_chat_id, text=err_text, disable_web_page_preview=True)
         
         if status_msg:
             try:

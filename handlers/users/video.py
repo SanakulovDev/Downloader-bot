@@ -135,14 +135,30 @@ async def handle_recognize_music(callback: CallbackQuery):
 async def handle_video_logic(message: Message, url: str):
     """
     Asosiy Video yuklash logikasi (Navbatga qo'shadi)
+    Mijoz link yuborsa, uning xabarini o'chirib, keyin status xabarini yuboradi
     """
     chat_id = message.chat.id
     
-    status_msg = await message.reply(f"⏳ <b>Video yuklanmoqda...</b>", parse_mode='HTML')
+    # Mijozning link xabarini o'chirish (preview ko'rsatilmasligi uchun)
+    try:
+        await message.delete()
+    except Exception as e:
+        # Agar xabarni o'chirib bo'lmasa (masalan, xabar juda eski yoki bot admin emas)
+        logger.warning(f"Xabarni o'chirib bo'lmadi: {e}")
+    
+    # Status xabarini yuborish
+    from loader import bot
+    status_msg = await bot.send_message(
+        chat_id=chat_id,
+        text="⏳ <b>Video yuklanmoqda...</b>",
+        parse_mode='HTML',
+        disable_web_page_preview=True
+    )
     
     # Queue ga qo'shish
     # position = DOWNLOAD_QUEUE.qsize() + 1
     # await status_msg.edit_text(f"⏳ <b>Navbatga qo'shildi!</b>\nSizning o'rningiz: {position}", parse_mode='HTML')
     
     # Queue handler o'zi `utils/download.py` dagi funksiyani chaqiradi
-    await DOWNLOAD_QUEUE.put(('video', chat_id, url, {'user_msg': message, 'status_msg': status_msg}))
+    # user_msg o'rniga None yuboramiz, chunki xabar o'chirilgan
+    await DOWNLOAD_QUEUE.put(('video', chat_id, url, {'user_msg': None, 'status_msg': status_msg, 'original_chat_id': chat_id}))
