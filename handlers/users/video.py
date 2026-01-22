@@ -14,6 +14,7 @@ from utils.validation import is_youtube_url, is_instagram_url, extract_url
 from tasks.bot_tasks import process_video_task
 from utils.search import search_music
 from utils.telegram_helpers import safe_delete_message, safe_edit_text
+from utils.i18n import get_user_lang, t
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -22,10 +23,12 @@ router = Router()
 async def handle_recognize_music(callback: CallbackQuery):
     """Videodagi musiqani aniqlash va variantlarni ko'rsatish"""
     video_id = callback.data.split(':')[1]
+    from loader import redis_client
+    lang = await get_user_lang(callback.from_user.id, redis_client)
     
     # Userga javob qaytarish (loading...)
-    await callback.answer("⏳ Musiqa aniqlanmoqda...", show_alert=False)
-    status_msg = await callback.message.answer("🔍 Audio qismi yuklanmoqda... 0%")
+    await callback.answer(t("recognize_start", lang), show_alert=False)
+    status_msg = await callback.message.answer(t("audio_part_loading", lang))
     
     # Biz yakuniy fayl .mp3 bo'lishini kutyapmiz
     temp_audio = Path(TMP_DIR) / f"recog_{video_id}.mp3"
@@ -64,7 +67,7 @@ async def handle_recognize_music(callback: CallbackQuery):
             }],
         }
         
-    await safe_edit_text(status_msg, "🔍 Audio yuklanmoqda... (Youtube)")
+        await safe_edit_text(status_msg, t("audio_loading_youtube", lang))
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             await asyncio.to_thread(ydl.download, [url])
@@ -78,11 +81,11 @@ async def handle_recognize_music(callback: CallbackQuery):
                     found = True
                     break
             if not found:
-                await safe_edit_text(status_msg, "❌ Audio yuklab bo'lmadi (Youtube blokladi).")
+                await safe_edit_text(status_msg, t("audio_download_failed", lang))
                 return
 
         # 2. Shazam orqali aniqlash
-        await safe_edit_text(status_msg, "🎧 Shazam orqali eshitilmoqda...")
+        await safe_edit_text(status_msg, t("shazam_listening", lang))
         shazam = Shazam()
         out = await shazam.recognize(str(temp_audio))
         
@@ -91,13 +94,13 @@ async def handle_recognize_music(callback: CallbackQuery):
         subtitle = track.get('subtitle')
         
         if not title:
-            await safe_edit_text(status_msg, "❌ Afsuski, bu musiqani aniqlab bo'lmadi.")
+            await safe_edit_text(status_msg, t("shazam_not_found", lang))
             return
             
         search_query = f"{title} {subtitle}"
         await safe_edit_text(
             status_msg,
-            f"✅ Topildi: <b>{search_query}</b>\n\n🔍 Botdan qidirilmoqda...",
+            t("shazam_found", lang, query=search_query),
             parse_mode='HTML'
         )
         
@@ -107,7 +110,7 @@ async def handle_recognize_music(callback: CallbackQuery):
         if not results:
             await safe_edit_text(
                 status_msg,
-                f"❌ '{search_query}' Shazamda topildi, lekin Youtubedan topa olmadim."
+                t("shazam_no_results", lang, query=search_query)
             )
             return
 
@@ -124,14 +127,14 @@ async def handle_recognize_music(callback: CallbackQuery):
         kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
         await safe_edit_text(
             status_msg,
-            f"🎵 <b>'{search_query}'</b>\n\nQaysi birini yuklab beray?",
+            t("choose_variant", lang, query=search_query),
             parse_mode='HTML',
             reply_markup=kb
         )
 
     except Exception as e:
         logger.error(f"Recognition error: {e}", exc_info=True)
-        await safe_edit_text(status_msg, "❌ Tizimda xatolik yuz berdi.")
+        await safe_edit_text(status_msg, t("system_error", lang))
         
     finally:
         # Faylni tozalash
@@ -155,9 +158,11 @@ async def handle_video_logic(message: Message, url: str):
     
     # Status xabarini yuborish
     from loader import bot
+    from loader import redis_client
+    lang = await get_user_lang(message.from_user.id, redis_client)
     status_msg = await bot.send_message(
         chat_id=chat_id,
-        text="⏳ <b>Video yuklanmoqda...</b>",
+        text=t("video_loading", lang),
         parse_mode='HTML',
         disable_web_page_preview=True
     )
@@ -172,8 +177,10 @@ async def handle_video_logic(message: Message, url: str):
 @router.callback_query(F.data == 'delete_this_msg')
 async def handle_delete_message_callback(callback: CallbackQuery):
     """Xabar o'chirish tugmasi bosilganda"""
+    from loader import redis_client
+    lang = await get_user_lang(callback.from_user.id, redis_client)
     deleted = await safe_delete_message(callback.message)
     if deleted:
-        await callback.answer("✅ Xabar o'chirildi", show_alert=False)
+        await callback.answer(t("delete_ok", lang), show_alert=False)
     else:
-        await callback.answer("❌ O'chirib bo'lmadi", show_alert=True)
+        await callback.answer(t("delete_failed", lang), show_alert=True)

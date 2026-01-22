@@ -10,6 +10,7 @@ from services.bot_client import create_bot_session
 from services.idempotency import acquire_lock, release_lock
 from services.media_sender import send_audio, send_video
 from services.message_utils import edit_or_reply_error, delete_message_only
+from utils.i18n import get_user_lang_sync, translate_error, t
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ def process_video_task(chat_id: int, url: str, status_message_id: Optional[int] 
 
 async def _process_video_task_async(chat_id: int, url: str, status_message_id: Optional[int]) -> None:
     bot, session = create_bot_session()
+    lang = get_user_lang_sync(chat_id)
     try:
         video_path = await download_video(url, chat_id)
         if video_path:
@@ -43,7 +45,7 @@ async def _process_video_task_async(chat_id: int, url: str, status_message_id: O
         else:
             await bot.send_message(
                 chat_id=chat_id,
-                text="❌ Video yuklab bo'lmadi.",
+                text=t("video_download_failed", lang),
                 disable_web_page_preview=True
             )
             if status_message_id:
@@ -53,9 +55,9 @@ async def _process_video_task_async(chat_id: int, url: str, status_message_id: O
                     pass
     except Exception as e:
         logger.error(f"Video task error: {e}")
-        err_text = str(e)
+        err_text = translate_error(str(e), lang)
         if "❌" not in err_text:
-            err_text = "❌ Yuklashda xatolik yuz berdi! (Keyinroq urinib ko'ring)"
+            err_text = t("download_error_generic", lang)
         await bot.send_message(chat_id=chat_id, text=err_text, disable_web_page_preview=True)
         if status_message_id:
             try:
@@ -93,6 +95,7 @@ async def _process_music_task_async(
     status_message_id: Optional[int]
 ) -> None:
     bot, session = create_bot_session()
+    lang = get_user_lang_sync(chat_id)
     try:
         audio_path, filename = await download_audio(video_id, chat_id)
         if audio_path:
@@ -121,13 +124,13 @@ async def _process_music_task_async(
                 message_id,
                 status_message_id,
                 is_media,
-                "❌ Musiqa yuklashda xatolik bo'ldi."
+                t("music_download_failed", lang)
             )
     except Exception as e:
         logger.error(f"Music task error: {e}")
-        err_text = str(e)
+        err_text = translate_error(str(e), lang)
         if "❌" not in err_text:
-            err_text = "❌ Yuborishda xatolik yuz berdi!"
+            err_text = t("send_error_generic", lang)
         await edit_or_reply_error(bot, chat_id, message_id, status_message_id, is_media, err_text)
     finally:
         await session.close()

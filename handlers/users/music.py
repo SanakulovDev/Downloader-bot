@@ -9,11 +9,12 @@ from states.bot_states import BotStates
 from utils.search import search_music
 from tasks.bot_tasks import process_music_task
 from utils.telegram_helpers import safe_delete_message, safe_edit_text
+from utils.i18n import get_user_lang, t
 
 router = Router()
 logger = logging.getLogger(__name__)
 
-async def show_music_page(chat_id, results, page, message_to_edit: Message = None):
+async def show_music_page(chat_id, results, page, lang: str, message_to_edit: Message = None):
     # This requires `bot` instance. We can import it from loader
     from loader import bot
     ITEMS_PER_PAGE = 10
@@ -50,13 +51,14 @@ async def show_music_page(chat_id, results, page, message_to_edit: Message = Non
     
     # Cancel button
     keyboard.append([
-        InlineKeyboardButton(text="❌ Bekor qilish", callback_data="delete_this_msg")
+        InlineKeyboardButton(text=t("cancel", lang), callback_data="delete_this_msg")
     ])
         
     kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
     
     text = (
-        f"🎵 Natijalar (Sahifa {page+1}):"
+        f"{t('search_tip', lang)}\n\n"
+        f"{t('search_results', lang, page=page+1)}"
     )
     
     if message_to_edit:
@@ -70,9 +72,10 @@ async def cmd_my_favorite(message: Message):
     """Sevimlilar ro'yxatini ko'rsatish"""
     user_id = message.from_user.id
     from loader import redis_client, bot
+    lang = await get_user_lang(user_id, redis_client)
     
     if not redis_client:
-        await message.answer("❌ Kechirasiz, bu funksiya hozir ishlamayapti (Database offline).")
+        await message.answer(t("db_error", lang))
         return
 
     # Get all likes
@@ -80,7 +83,7 @@ async def cmd_my_favorite(message: Message):
     logger.info(f"Fetching likes for user {user_id}. Found: {len(likes) if likes else 0}")
     
     if not likes:
-        await message.answer("🤷‍♂️ Sizda hali sevimli musiqalar yo'q.")
+        await message.answer(t("favorites_empty", lang))
         return
         
     # Parse likes (id|title)
@@ -125,28 +128,29 @@ async def cmd_my_favorite(message: Message):
     if isinstance(message, CallbackQuery):
         await safe_edit_text(
             message.message,
-            "❤️ <b>Sizning sevimli musiqalaringiz:</b>",
+            t("favorites_title", lang),
             parse_mode='HTML',
             reply_markup=kb
         )
     else:
-        await message.answer("❤️ <b>Sizning sevimli musiqalaringiz:</b>", parse_mode='HTML', reply_markup=kb)
+        await message.answer(t("favorites_title", lang), parse_mode='HTML', reply_markup=kb)
 
 @router.callback_query(F.data == 'del_fav_all')
 async def handle_delete_all_favorites(callback: CallbackQuery):
     """Barcha sevimlilarni o'chirish"""
     user_id = callback.from_user.id
     from loader import redis_client
+    lang = await get_user_lang(user_id, redis_client)
     
     if not redis_client:
-        await callback.answer("❌ Database error", show_alert=True)
+        await callback.answer(t("db_error", lang), show_alert=True)
         return
         
     # Delete the entire set
     await redis_client.delete(f"user:{user_id}:likes")
     
-    await callback.answer("🧹 Barcha musiqalar o'chirildi!")
-    await safe_edit_text(callback.message, "🤷‍♂️ Sizda hali sevimli musiqalar yo'q.")
+    await callback.answer(t("favorites_cleared", lang))
+    await safe_edit_text(callback.message, t("favorites_empty", lang))
 
 @router.callback_query(F.data.startswith('del_fav:'))
 async def handle_delete_favorite(callback: CallbackQuery):
@@ -154,9 +158,10 @@ async def handle_delete_favorite(callback: CallbackQuery):
     video_id = callback.data.split(':')[1]
     user_id = callback.from_user.id
     from loader import redis_client
+    lang = await get_user_lang(user_id, redis_client)
     
     if not redis_client:
-        await callback.answer("❌ Database error", show_alert=True)
+        await callback.answer(t("db_error", lang), show_alert=True)
         return
 
     # Find the full item to delete (id|title)
@@ -190,8 +195,10 @@ async def handle_like(callback: CallbackQuery):
     elif callback.message.caption:
         title = callback.message.caption.split('\n')[0].replace('🎵 ', '')
     
-    # Redis ga saqlash: "id|title"
     from loader import redis_client
+    lang = await get_user_lang(user_id, redis_client)
+
+    # Redis ga saqlash: "id|title"
     if redis_client:
         try:
             # Add to user's like set
@@ -200,10 +207,10 @@ async def handle_like(callback: CallbackQuery):
             logger.info(f"Added like for user {user_id}: {data} (Result: {added_count})")
             
             if added_count == 0:
-                await callback.answer("⚠️ Bu musiqa sevimlilarda allaqachon bor!", show_alert=True)
+                await callback.answer(t("like_exists", lang), show_alert=True)
                 return
             else:
-                 await callback.answer("❤️ Sevimlilarga qo'shildi!", show_alert=False)
+                 await callback.answer(t("like_added", lang), show_alert=False)
 
         except Exception as e:
             logger.error(f"Redis add error: {e}")
@@ -227,31 +234,35 @@ async def handle_music_logic(message: Message, state: FSMContext):
 
     await safe_delete_message(message)
 
-    status_msg = await message.answer("⏳ <b>Musiqangiz yuklanmoqda...</b>", parse_mode='HTML')
+    from loader import redis_client
+    lang = await get_user_lang(message.from_user.id, redis_client)
+    status_msg = await message.answer(t("music_loading", lang), parse_mode='HTML')
     
     # 20 ta natija olish (pagination uchun)
     results = await search_music(text) 
     
     if not results:
-        await safe_edit_text(status_msg, "❌ Hech narsa topilmadi.")
+        await safe_edit_text(status_msg, t("no_results", lang))
         return
 
     # Cache results in state for pagination
     await state.update_data(search_results=results, search_query=text)
     
-    await show_music_page(message.chat.id, results, 0, status_msg)
+    await show_music_page(message.chat.id, results, 0, lang, status_msg)
 
 @router.callback_query(F.data.startswith('music_page:'))
 async def handle_music_pagination(callback: CallbackQuery, state: FSMContext):
+    from loader import redis_client
+    lang = await get_user_lang(callback.from_user.id, redis_client)
     page = int(callback.data.split(':')[1])
     data = await state.get_data()
     results = data.get('search_results', [])
     
     if not results:
-        await callback.answer("❌ Qidiruv natijalari eskirgan.", show_alert=True)
+        await callback.answer(t("no_results", lang), show_alert=True)
         return
 
-    await show_music_page(callback.message.chat.id, results, page, callback.message)
+    await show_music_page(callback.message.chat.id, results, page, lang, callback.message)
     await callback.answer()
 
 @router.callback_query(F.data.startswith('music:'))
@@ -268,7 +279,9 @@ async def handle_music_callback(callback: CallbackQuery):
     except:
         pass
         
-    await callback.answer("⏳ Musiqa yuklanmoqda...", show_alert=False)
+    from loader import redis_client
+    lang = await get_user_lang(callback.from_user.id, redis_client)
+    await callback.answer(t("music_button_loading", lang), show_alert=False)
     
     # Celery taskga yuboramiz (parallel bajariladi)
     status_msg = None
@@ -277,12 +290,12 @@ async def handle_music_callback(callback: CallbackQuery):
         if is_media:
             # Reply to the video message
             status_msg = await callback.message.reply(
-                "⏳ <b>Musiqangiz yuklanmoqda...</b>",
+                t("music_loading", lang),
                 parse_mode='HTML'
             )
         else:
             # Edit text (search result)
-            await safe_edit_text(callback.message, "⏳ <b>Musiqangiz yuklanmoqda...</b>", parse_mode='HTML')
+            await safe_edit_text(callback.message, t("music_loading", lang), parse_mode='HTML')
     except Exception as e:
         # Fallback
         logger.error(f"Error updating status: {e}")
@@ -301,36 +314,39 @@ async def handle_artist_songs(callback: CallbackQuery, state: FSMContext):
     """Muallifning boshqa qo'shiqlarini ko'rsatish"""
     video_id = callback.data.split(':')[1]
     from loader import redis_client
+    lang = await get_user_lang(callback.from_user.id, redis_client)
 
     if not redis_client:
-        await callback.answer("❌ Database error", show_alert=True)
+        await callback.answer(t("db_error", lang), show_alert=True)
         return
 
     artist_name = await redis_client.get(f"artist:{video_id}")
     if not artist_name:
-        await callback.answer("❌ Muallif topilmadi", show_alert=True)
+        await callback.answer(t("artist_not_found", lang), show_alert=True)
         return
 
     if isinstance(artist_name, bytes):
         artist_name = artist_name.decode()
 
-    await callback.answer("🔍 Qidirilmoqda...", show_alert=False)
+    await callback.answer(t("searching", lang), show_alert=False)
     status_msg = await callback.message.reply(
-        f"🎤 <b>{artist_name}</b> qo'shiqlari qidirilmoqda...",
+        t("artist_searching", lang, artist=artist_name),
         parse_mode='HTML'
     )
 
     results = await search_music(artist_name)
     if not results:
-        await safe_edit_text(status_msg, "❌ Hech narsa topilmadi.")
+        await safe_edit_text(status_msg, t("no_results", lang))
         return
 
     await state.update_data(search_results=results, search_query=artist_name)
-    await show_music_page(callback.message.chat.id, results, 0, status_msg)
+    await show_music_page(callback.message.chat.id, results, 0, lang, status_msg)
 
 @router.callback_query(F.data == 'delete_this_msg')
 async def handle_delete_message_callback(callback: CallbackQuery):
     """Xabar o'chirish tugmasi bosilganda"""
+    from loader import redis_client
+    lang = await get_user_lang(callback.from_user.id, redis_client)
     deleted = await safe_delete_message(callback.message)
     if not deleted:
-        await callback.answer("❌ O'chirib bo'lmadi", show_alert=True)
+        await callback.answer(t("delete_failed", lang), show_alert=True)
