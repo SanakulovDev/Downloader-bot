@@ -8,6 +8,7 @@ from loader import dp
 from states.bot_states import BotStates
 from utils.search import search_music
 from tasks.bot_tasks import process_music_task
+from utils.telegram_helpers import safe_delete_message, safe_edit_text
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ async def show_music_page(chat_id, results, page, message_to_edit: Message = Non
     )
     
     if message_to_edit:
-        await message_to_edit.edit_text(text, reply_markup=kb)
+        await safe_edit_text(message_to_edit, text, reply_markup=kb)
     else:
         await bot.send_message(chat_id, text, reply_markup=kb)
 
@@ -122,7 +123,12 @@ async def cmd_my_favorite(message: Message):
     
     # If called from callback (refresh), edit text. Else answer.
     if isinstance(message, CallbackQuery):
-        await message.message.edit_text("❤️ <b>Sizning sevimli musiqalaringiz:</b>", parse_mode='HTML', reply_markup=kb)
+        await safe_edit_text(
+            message.message,
+            "❤️ <b>Sizning sevimli musiqalaringiz:</b>",
+            parse_mode='HTML',
+            reply_markup=kb
+        )
     else:
         await message.answer("❤️ <b>Sizning sevimli musiqalaringiz:</b>", parse_mode='HTML', reply_markup=kb)
 
@@ -140,7 +146,7 @@ async def handle_delete_all_favorites(callback: CallbackQuery):
     await redis_client.delete(f"user:{user_id}:likes")
     
     await callback.answer("🧹 Barcha musiqalar o'chirildi!")
-    await callback.message.edit_text("🤷‍♂️ Sizda hali sevimli musiqalar yo'q.")
+    await safe_edit_text(callback.message, "🤷‍♂️ Sizda hali sevimli musiqalar yo'q.")
 
 @router.callback_query(F.data.startswith('del_fav:'))
 async def handle_delete_favorite(callback: CallbackQuery):
@@ -219,10 +225,7 @@ async def handle_music_logic(message: Message, state: FSMContext):
     if text.startswith("/"):
         return
 
-    try:
-        await message.delete()
-    except Exception:
-        pass
+    await safe_delete_message(message)
 
     status_msg = await message.answer("⏳ <b>Musiqangiz yuklanmoqda...</b>", parse_mode='HTML')
     
@@ -230,7 +233,7 @@ async def handle_music_logic(message: Message, state: FSMContext):
     results = await search_music(text) 
     
     if not results:
-        await status_msg.edit_text("❌ Hech narsa topilmadi.")
+        await safe_edit_text(status_msg, "❌ Hech narsa topilmadi.")
         return
 
     # Cache results in state for pagination
@@ -279,7 +282,7 @@ async def handle_music_callback(callback: CallbackQuery):
             )
         else:
             # Edit text (search result)
-            await callback.message.edit_text("⏳ <b>Musiqangiz yuklanmoqda...</b>", parse_mode='HTML')
+            await safe_edit_text(callback.message, "⏳ <b>Musiqangiz yuklanmoqda...</b>", parse_mode='HTML')
     except Exception as e:
         # Fallback
         logger.error(f"Error updating status: {e}")
@@ -319,7 +322,7 @@ async def handle_artist_songs(callback: CallbackQuery, state: FSMContext):
 
     results = await search_music(artist_name)
     if not results:
-        await status_msg.edit_text("❌ Hech narsa topilmadi.")
+        await safe_edit_text(status_msg, "❌ Hech narsa topilmadi.")
         return
 
     await state.update_data(search_results=results, search_query=artist_name)
@@ -328,7 +331,6 @@ async def handle_artist_songs(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == 'delete_this_msg')
 async def handle_delete_message_callback(callback: CallbackQuery):
     """Xabar o'chirish tugmasi bosilganda"""
-    try:
-        await callback.message.delete()
-    except Exception as e:
+    deleted = await safe_delete_message(callback.message)
+    if not deleted:
         await callback.answer("❌ O'chirib bo'lmadi", show_alert=True)

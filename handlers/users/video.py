@@ -13,6 +13,7 @@ from keyboards.default_keyboards import main_menu
 from utils.validation import is_youtube_url, is_instagram_url, extract_url
 from tasks.bot_tasks import process_video_task
 from utils.search import search_music
+from utils.telegram_helpers import safe_delete_message, safe_edit_text
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -63,7 +64,7 @@ async def handle_recognize_music(callback: CallbackQuery):
             }],
         }
         
-        await status_msg.edit_text("🔍 Audio yuklanmoqda... (Youtube)")
+    await safe_edit_text(status_msg, "🔍 Audio yuklanmoqda... (Youtube)")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             await asyncio.to_thread(ydl.download, [url])
@@ -77,11 +78,11 @@ async def handle_recognize_music(callback: CallbackQuery):
                     found = True
                     break
             if not found:
-                await status_msg.edit_text("❌ Audio yuklab bo'lmadi (Youtube blokladi).")
+                await safe_edit_text(status_msg, "❌ Audio yuklab bo'lmadi (Youtube blokladi).")
                 return
 
         # 2. Shazam orqali aniqlash
-        await status_msg.edit_text("🎧 Shazam orqali eshitilmoqda...")
+        await safe_edit_text(status_msg, "🎧 Shazam orqali eshitilmoqda...")
         shazam = Shazam()
         out = await shazam.recognize(str(temp_audio))
         
@@ -90,17 +91,24 @@ async def handle_recognize_music(callback: CallbackQuery):
         subtitle = track.get('subtitle')
         
         if not title:
-            await status_msg.edit_text("❌ Afsuski, bu musiqani aniqlab bo'lmadi.")
+            await safe_edit_text(status_msg, "❌ Afsuski, bu musiqani aniqlab bo'lmadi.")
             return
             
         search_query = f"{title} {subtitle}"
-        await status_msg.edit_text(f"✅ Topildi: <b>{search_query}</b>\n\n🔍 Botdan qidirilmoqda...", parse_mode='HTML')
+        await safe_edit_text(
+            status_msg,
+            f"✅ Topildi: <b>{search_query}</b>\n\n🔍 Botdan qidirilmoqda...",
+            parse_mode='HTML'
+        )
         
         # 3. YouTube dan variantlarni qidirish (Bot ichidan yuklab berish uchun)
         results = await search_music(search_query)
         
         if not results:
-            await status_msg.edit_text(f"❌ '{search_query}' Shazamda topildi, lekin Youtubedan topa olmadim.")
+            await safe_edit_text(
+                status_msg,
+                f"❌ '{search_query}' Shazamda topildi, lekin Youtubedan topa olmadim."
+            )
             return
 
         # 4. Variantlarni ko'rsatish
@@ -114,7 +122,8 @@ async def handle_recognize_music(callback: CallbackQuery):
             ])
         
         kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
-        await status_msg.edit_text(
+        await safe_edit_text(
+            status_msg,
             f"🎵 <b>'{search_query}'</b>\n\nQaysi birini yuklab beray?",
             parse_mode='HTML',
             reply_markup=kb
@@ -122,7 +131,7 @@ async def handle_recognize_music(callback: CallbackQuery):
 
     except Exception as e:
         logger.error(f"Recognition error: {e}", exc_info=True)
-        await status_msg.edit_text("❌ Tizimda xatolik yuz berdi.")
+        await safe_edit_text(status_msg, "❌ Tizimda xatolik yuz berdi.")
         
     finally:
         # Faylni tozalash
@@ -140,11 +149,9 @@ async def handle_video_logic(message: Message, url: str):
     chat_id = message.chat.id
     
     # Mijozning link xabarini o'chirish (preview ko'rsatilmasligi uchun)
-    try:
-        await message.delete()
-    except Exception as e:
-        # Agar xabarni o'chirib bo'lmasa (masalan, xabar juda eski yoki bot admin emas)
-        logger.warning(f"Xabarni o'chirib bo'lmadi: {e}")
+    deleted = await safe_delete_message(message)
+    if not deleted:
+        logger.warning("Xabarni o'chirib bo'lmadi.")
     
     # Status xabarini yuborish
     from loader import bot
@@ -165,8 +172,8 @@ async def handle_video_logic(message: Message, url: str):
 @router.callback_query(F.data == 'delete_this_msg')
 async def handle_delete_message_callback(callback: CallbackQuery):
     """Xabar o'chirish tugmasi bosilganda"""
-    try:
-        await callback.message.delete()
+    deleted = await safe_delete_message(callback.message)
+    if deleted:
         await callback.answer("✅ Xabar o'chirildi", show_alert=False)
-    except Exception as e:
+    else:
         await callback.answer("❌ O'chirib bo'lmadi", show_alert=True)

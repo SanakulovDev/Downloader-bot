@@ -42,6 +42,35 @@ COMMON_OPTS = {
     'http_chunk_size': 10485760,
 }
 
+def _map_download_error(err_msg: str, media_type: str) -> Exception:
+    if "larger than" in err_msg or "too large" in err_msg:
+        if media_type == "audio":
+            return Exception("❌ Audio hajmi juda katta (2GB dan ortiq).")
+        return Exception("❌ Video hajmi juda katta (2GB dan ortiq). Telegram orqali yuborib bo'lmaydi.")
+    if "video unavailable" in err_msg or "private video" in err_msg:
+        if media_type == "audio":
+            return Exception("❌ Audio/Video topilmadi yoki o'chirilgan.")
+        return Exception("❌ Video topilmadi yoki o'chirilgan (Private).")
+    if "sign in" in err_msg or "age-gated" in err_msg:
+        if media_type == "audio":
+            return Exception("❌ Yosh cheklovi yoki login talab qilinadi.")
+        return Exception("❌ Bu video yosh cheklovi (18+) yoki login talab qiladi.")
+    if "copyright" in err_msg:
+        return Exception("❌ Mualliflik huquqi tufayli yuklab bo'lmadi.")
+    if "geo-restricted" in err_msg or "available to" in err_msg:
+        if media_type == "audio":
+            return Exception("❌ Hududiy cheklov tufayli yuklanmaydi.")
+        return Exception("❌ Bu video hududiy cheklov tufayli yuklanmaydi.")
+    return Exception(err_msg)
+
+
+def _find_downloaded_file(search_dir: Path, prefix: str) -> Optional[Path]:
+    for file in search_dir.glob(f"{prefix}.*"):
+        if file.is_file() and not file.name.endswith('.part'):
+            return file
+    return None
+
+
 async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Optional[str]]:
     """Music yuklab olish - MP3"""
     url = f"https://www.youtube.com/watch?v={video_id}"
@@ -76,29 +105,13 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
                     title = info.get('title', 'Audio')
                     author = info.get('uploader', 'Unknown')
         except yt_dlp.utils.DownloadError as e:
-            err_msg = str(e).lower()
-            if "larger than" in err_msg or "too large" in err_msg:
-                 raise Exception("❌ Audio hajmi juda katta (2GB dan ortiq).")
-            elif "video unavailable" in err_msg or "private video" in err_msg:
-                 raise Exception("❌ Audio/Video topilmadi yoki o'chirilgan.")
-            elif "sign in" in err_msg or "age-gated" in err_msg:
-                 raise Exception("❌ Yosh cheklovi yoki login talab qilinadi.")
-            elif "copyright" in err_msg:
-                 raise Exception("❌ Mualliflik huquqi tufayli yuklab bo'lmadi.")
-            elif "geo-restricted" in err_msg or "available to" in err_msg:
-                 raise Exception("❌ Hududiy cheklov tufayli yuklanmaydi.")
-            else:
-                 raise e
+            raise _map_download_error(str(e).lower(), "audio")
 
         clean_title = f"{title} - {author}".replace('/', '-').replace('\\', '-')
         
         # Faylni qidiramiz (chunki u .m4a, .webm va hokazo bo'lishi mumkin)
         # video_id.* bo'yicha glob qilamiz
-        downloaded_file = None
-        for file in Path(TMP_DIR).glob(f"{video_id}.*"):
-            if file.is_file() and not file.name.endswith('.part'):
-                downloaded_file = file
-                break
+        downloaded_file = _find_downloaded_file(Path(TMP_DIR), video_id)
         
         if downloaded_file:
             return str(downloaded_file), f"{clean_title}{downloaded_file.suffix}"
@@ -155,28 +168,9 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 await asyncio.to_thread(ydl.download, [url])
         except yt_dlp.utils.DownloadError as e:
-            err_msg = str(e).lower()
-            if "larger than" in err_msg or "too large" in err_msg:
-                 raise Exception("❌ Video hajmi juda katta (2GB dan ortiq). Telegram orqali yuborib bo'lmaydi.")
-            elif "video unavailable" in err_msg or "private video" in err_msg:
-                 raise Exception("❌ Video topilmadi yoki o'chirilgan (Private).")
-            elif "sign in" in err_msg or "age-gated" in err_msg:
-                 raise Exception("❌ Bu video yosh cheklovi (18+) yoki login talab qiladi.")
-            elif "copyright" in err_msg:
-                 raise Exception("❌ Mualliflik huquqi tufayli yuklab bo'lmadi.")
-            elif "geo-restricted" in err_msg or "available to" in err_msg:
-                 raise Exception("❌ Bu video hududiy cheklov tufayli yuklanmaydi.")
-            else:
-                 raise e
+            raise _map_download_error(str(e).lower(), "video")
 
-        downloaded_file = None
-        if temp_file.exists():
-             downloaded_file = temp_file
-        else:
-            for file in temp_file.parent.glob(f"{temp_file.stem}.*"):
-                if file.exists() and not file.name.endswith('.part'):
-                    downloaded_file = file
-                    break
+        downloaded_file = temp_file if temp_file.exists() else _find_downloaded_file(temp_file.parent, temp_file.stem)
 
         if not downloaded_file:
             return None

@@ -29,27 +29,26 @@ class ActivityMiddleware(BaseMiddleware):
                     lock_key = f"user:last_active:lock:{user.id}"
                     acquired = await redis_client.set(lock_key, "1", nx=True, ex=ttl)
                     if acquired:
-                        async with async_session() as session:
-                            stmt = select(DBUser).where(DBUser.id == user.id)
-                            result = await session.execute(stmt)
-                            db_user = result.scalar_one_or_none()
-                            if db_user:
-                                cached_ts = await redis_client.get(last_active_key)
-                                if cached_ts:
-                                    cached_dt = datetime.fromtimestamp(float(cached_ts), tz=timezone.utc)
-                                    db_user.last_active = cached_dt
-                                else:
-                                    db_user.last_active = datetime.now(timezone.utc)
-                                await session.commit()
+                        cached_dt = await self._get_cached_dt(last_active_key)
+                        await self._update_db_last_active(user.id, cached_dt)
                 else:
-                    async with async_session() as session:
-                        stmt = select(DBUser).where(DBUser.id == user.id)
-                        result = await session.execute(stmt)
-                        db_user = result.scalar_one_or_none()
-                        if db_user:
-                            db_user.last_active = datetime.now(timezone.utc)
-                            await session.commit()
+                    await self._update_db_last_active(user.id, datetime.now(timezone.utc))
             except Exception as e:
                 logging.error(f"Failed to update activity for user {user.id}: {e}")
 
         return await handler(event, data)
+
+    async def _get_cached_dt(self, key: str) -> datetime:
+        cached_ts = await redis_client.get(key)
+        if cached_ts:
+            return datetime.fromtimestamp(float(cached_ts), tz=timezone.utc)
+        return datetime.now(timezone.utc)
+
+    async def _update_db_last_active(self, user_id: int, last_active: datetime) -> None:
+        async with async_session() as session:
+            stmt = select(DBUser).where(DBUser.id == user_id)
+            result = await session.execute(stmt)
+            db_user = result.scalar_one_or_none()
+            if db_user:
+                db_user.last_active = last_active
+                await session.commit()
