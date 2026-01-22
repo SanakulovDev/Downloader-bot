@@ -3,7 +3,7 @@ import os
 import hashlib
 import logging
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Callable
 import yt_dlp
 from instagram_downloader import download_instagram_direct
 from loader import TMP_DIR, redis_client
@@ -128,7 +128,12 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
     return None, None
 
 
-async def download_video(url: str, chat_id: int) -> Optional[str]:
+async def download_video(
+    url: str,
+    chat_id: int,
+    format_id: Optional[str] = None,
+    progress_hook: Optional[Callable[[dict], None]] = None
+) -> Optional[str]:
     """Video yuklab olish"""
     temp_file = None
     try:
@@ -157,11 +162,16 @@ async def download_video(url: str, chat_id: int) -> Optional[str]:
             # 1. 480p gacha bo'lgan eng yaxshi mp4 video + audio
             # 2. Agar u bo'lmasa, shunchaki 480p gacha bo'lgan eng yaxshi format
             # 3. Agar u ham bo'lmasa, har qanday eng yaxshi mp4
-            'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best',
+            'format': (
+                format_id if format_id else
+                'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best'
+            ),
             'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
             'max_filesize': 2 * 1024 * 1024 * 1024,
         }
+        if progress_hook:
+            ydl_opts['progress_hooks'] = [progress_hook]
 
         logger.info(f"Downloading Video: {url}")
         try:

@@ -156,22 +156,160 @@ async def handle_video_logic(message: Message, url: str):
     if not deleted:
         logger.warning("Xabarni o'chirib bo'lmadi.")
     
-    # Status xabarini yuborish
     from loader import bot
     from loader import redis_client
     lang = await get_user_lang(message.from_user.id, redis_client)
+
+    if is_youtube_url(url):
+        info = await _fetch_video_info(url)
+        if not info:
+            status_msg = await bot.send_message(
+                chat_id=chat_id,
+                text=t("video_loading", lang),
+                parse_mode='HTML',
+                disable_web_page_preview=True
+            )
+            process_video_task.delay(
+                chat_id=chat_id,
+                url=url,
+                status_message_id=status_msg.message_id
+            )
+            return
+
+        title = info.get("title") or "Video"
+        uploader = info.get("uploader") or ""
+        caption = f"{title}\n{uploader}\n\n{t('choose_format', lang)}"
+        keyboard = _build_format_keyboard(info, lang)
+        thumb = info.get("thumbnail")
+
+        if thumb:
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=thumb,
+                caption=caption,
+                parse_mode='HTML',
+                reply_markup=keyboard
+            )
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=caption,
+                parse_mode='HTML',
+                reply_markup=keyboard,
+                disable_web_page_preview=True
+            )
+        return
+
+    # Instagram va boshqa holatlar uchun eski oqim
     status_msg = await bot.send_message(
         chat_id=chat_id,
         text=t("video_loading", lang),
         parse_mode='HTML',
         disable_web_page_preview=True
     )
-    
-    # Celery taskga yuboramiz (parallel bajariladi)
     process_video_task.delay(
         chat_id=chat_id,
         url=url,
         status_message_id=status_msg.message_id
+    )
+
+
+def _estimate_size_bytes(fmt: dict, duration: int | None) -> int | None:
+    size = fmt.get("filesize") or fmt.get("filesize_approx")
+    if size:
+        return int(size)
+    tbr = fmt.get("tbr")  # kbps
+    if tbr and duration:
+        return int(tbr * 1000 / 8 * duration)
+    return None
+
+
+def _build_format_keyboard(info: dict, lang: str) -> InlineKeyboardMarkup:
+    formats = info.get("formats") or []
+    duration = info.get("duration")
+    max_size = 1 * 1024 * 1024 * 1024
+    items = []
+    seen = set()
+    for fmt in formats:
+        if fmt.get("ext") != "mp4":
+            continue
+        if fmt.get("vcodec") == "none" or fmt.get("acodec") == "none":
+            continue
+        height = fmt.get("height")
+        if not height:
+            continue
+        size = _estimate_size_bytes(fmt, duration)
+        if size and size > max_size:
+            continue
+        if height in seen:
+            continue
+        seen.add(height)
+        items.append((height, fmt.get("format_id")))
+
+    items.sort(key=lambda x: x[0])
+    buttons = []
+    row = []
+    for height, format_id in items[:6]:
+        row.append(
+            InlineKeyboardButton(
+                text=f"{height}p",
+                callback_data=f"video_format:{info.get('id')}:{format_id}"
+            )
+        )
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    buttons.append([
+        InlineKeyboardButton(text="🎵", callback_data=f"music:{info.get('id')}"),
+        InlineKeyboardButton(text="❌", callback_data="delete_this_msg")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+async def _fetch_video_info(url: str) -> dict | None:
+    def _extract() -> dict | None:
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'ignoreerrors': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            return ydl.extract_info(url, download=False)
+    try:
+        return await asyncio.to_thread(_extract)
+    except Exception:
+        return None
+
+
+@router.callback_query(F.data.startswith('video_format:'))
+async def handle_video_format(callback: CallbackQuery):
+    data = callback.data.split(':', 2)
+    if len(data) < 3:
+        return
+    video_id = data[1]
+    format_id = data[2]
+    from loader import redis_client
+    lang = await get_user_lang(callback.from_user.id, redis_client)
+
+    await callback.answer(t("video_loading", lang), show_alert=False)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    try:
+        await callback.message.edit_caption(t("video_loading", lang), parse_mode='HTML')
+    except Exception:
+        await safe_edit_text(callback.message, t("video_loading", lang), parse_mode='HTML')
+
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    process_video_task.delay(
+        chat_id=callback.message.chat.id,
+        url=url,
+        status_message_id=callback.message.message_id,
+        format_id=format_id
     )
 
 @router.callback_query(F.data == 'delete_this_msg')

@@ -87,8 +87,16 @@ _TEXTS: dict[str, dict[str, str]] = {
         "ru": "🎵 Результаты (страница {page}):",
     },
     "search_tip": {
-        "uz": "",
-        "ru": "",
+        "uz": "Musiqa qidirmoqchimisiz menga yozing va men bir zumda topib beraman.",
+        "ru": "Хотите найти музыку? Напишите мне, и я быстро найду.",
+    },
+    "choose_format": {
+        "uz": "Formatni tanlang:",
+        "ru": "Выберите формат:",
+    },
+    "video_progress": {
+        "uz": "⏳ <b>Video yuklanmoqda...</b> {percent}",
+        "ru": "⏳ <b>Видео загружается...</b> {percent}",
     },
     "cancel": {
         "uz": "❌ Bekor qilish",
