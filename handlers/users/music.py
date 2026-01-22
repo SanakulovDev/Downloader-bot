@@ -55,7 +55,6 @@ async def show_music_page(chat_id, results, page, message_to_edit: Message = Non
     kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
     
     text = (
-        "Musiqa qidirmoqchimisiz menga yozing va men bir zumda topib beraman.\n\n"
         f"🎵 Natijalar (Sahifa {page+1}):"
     )
     
