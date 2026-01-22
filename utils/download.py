@@ -125,6 +125,7 @@ async def download_video(
     url: str,
     chat_id: int,
     format_selector: Optional[str] = None,
+    output_ext: Optional[str] = None,
     progress_hook: Optional[Callable[[dict], None]] = None
 ) -> Optional[str]:
     """Video yuklab olish"""
@@ -150,18 +151,19 @@ async def download_video(
                 return result
 
         format_selector = format_selector or "bestvideo*+bestaudio/best"
+        merge_ext = output_ext if output_ext in {"mp4", "webm", "mkv"} else "mp4"
 
         # YOUTUBE formatini Shorts va har xil sifatlarga moslab yangilash
         ydl_opts = {
             **COMMON_OPTS,
             # Hech qanday formatni "majbur" qilmaymiz: mavjud bo'lgan eng yaxshi video+audio (yoki best) ni olamiz.
             'format': f"{format_selector}/best",
-            # Telegram uchun MP4 konteynerga remux (re-encode emas).
+            # Telegram uchun kerakli konteynerga remux (re-encode emas).
             'postprocessors': [{
                 'key': 'FFmpegVideoRemuxer',
-                'preferedformat': 'mp4',
+                'preferedformat': merge_ext,
             }],
-            'merge_output_format': 'mp4',
+            'merge_output_format': merge_ext,
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
             'noplaylist': True,
             'cachedir': False,
@@ -175,7 +177,13 @@ async def download_video(
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 await asyncio.to_thread(ydl.download, [url])
         except yt_dlp.utils.DownloadError as e:
-            raise _map_download_error(str(e).lower(), "video")
+            err_msg = str(e).lower()
+            if "requested format is not available" in err_msg and format_selector:
+                fallback_opts = {**ydl_opts, 'format': 'bestvideo*+bestaudio/best/best'}
+                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                    await asyncio.to_thread(ydl.download, [url])
+            else:
+                raise _map_download_error(err_msg, "video")
 
         downloaded_file = temp_file if temp_file.exists() else _find_downloaded_file(temp_file.parent, temp_file.stem)
 

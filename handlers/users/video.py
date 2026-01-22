@@ -237,10 +237,14 @@ def _estimate_size_bytes(fmt: dict, duration: int | None) -> int | None:
 def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMarkup | None]:
     formats = info.get("formats") or []
     duration = info.get("duration")
-    max_size = 1 * 1024 * 1024 * 1024
+    max_size = 2 * 1024 * 1024 * 1024
     items = []
     seen = set()
-    audio_sel = "bestaudio[ext=m4a]/bestaudio"
+    audio_sel_mp4 = "bestaudio[ext=m4a]/bestaudio"
+    audio_sel_webm = "bestaudio[ext=webm]/bestaudio"
+    audio_exts = {fmt.get("ext") for fmt in formats if fmt.get("vcodec") == "none" and fmt.get("acodec")}
+    has_m4a = "m4a" in audio_exts or "mp4" in audio_exts
+    has_webm_audio = "webm" in audio_exts
     for fmt in formats:
         # Faqat video streamlarni ko'rsatamiz
         if fmt.get("vcodec") == "none":
@@ -249,10 +253,10 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         if not height:
             continue
 
-        # Telegram uchun odatda MP4 yaxshi, lekin ba'zi videolarda video formatlar faqat WEBM bo'lishi mumkin.
+        # Telegram uchun odatda MP4 yaxshi, lekin ba'zi videolarda faqat WEBM bo'lishi mumkin.
         # Shuning uchun mp4/webm ikkalasini ham qabul qilamiz.
         ext = fmt.get("ext")
-        if ext != "mp4":
+        if ext not in {"mp4", "webm"}:
             continue
 
         format_id = fmt.get("format_id")
@@ -264,7 +268,14 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         if fmt.get("acodec") and fmt.get("acodec") != "none":
             selector = str(format_id)
         else:
-            selector = f"{format_id}+{audio_sel}"
+            if ext == "mp4":
+                if not has_m4a:
+                    continue
+                selector = f"{format_id}+{audio_sel_mp4}"
+            else:
+                if not has_webm_audio:
+                    continue
+                selector = f"{format_id}+{audio_sel_webm}"
 
         size = _estimate_size_bytes(fmt, duration)
         if size and size > max_size:
@@ -299,7 +310,7 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         row.append(
             InlineKeyboardButton(
                 text=f"{height}p ({ext})",
-                callback_data=f"video_format:{info.get('id')}:{selector}"
+                callback_data=f"video_format:{info.get('id')}:{selector}:{ext}"
             )
         )
         if len(row) == 2:
@@ -399,11 +410,12 @@ async def _edit_preview_with_formats(bot, message: Message, caption: str, keyboa
 
 @router.callback_query(F.data.startswith('video_format:'))
 async def handle_video_format(callback: CallbackQuery):
-    data = callback.data.split(':', 2)
-    if len(data) < 3:
+    data = callback.data.split(':', 3)
+    if len(data) < 4:
         return
     video_id = data[1]
     format_selector = data[2]
+    output_ext = data[3]
     from loader import redis_client
     lang = await get_user_lang(callback.from_user.id, redis_client)
 
@@ -422,7 +434,8 @@ async def handle_video_format(callback: CallbackQuery):
         chat_id=callback.message.chat.id,
         url=url,
         status_message_id=callback.message.message_id,
-        format_selector=format_selector
+        format_selector=format_selector,
+        output_ext=output_ext
     )
 
 @router.callback_query(F.data == 'delete_this_msg')

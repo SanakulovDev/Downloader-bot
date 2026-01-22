@@ -21,7 +21,8 @@ def process_video_task(
     chat_id: int,
     url: str,
     status_message_id: Optional[int] = None,
-    format_selector: Optional[str] = None
+    format_selector: Optional[str] = None,
+    output_ext: Optional[str] = None
 ) -> None:
     url_hash = sha256(url.encode()).hexdigest()[:16]
     lock_key = f"idempotency:video:{chat_id}:{url_hash}"
@@ -30,7 +31,7 @@ def process_video_task(
             asyncio.run(_delete_message_only(chat_id, status_message_id))
         return
     try:
-        asyncio.run(_process_video_task_async(chat_id, url, status_message_id, format_selector))
+        asyncio.run(_process_video_task_async(chat_id, url, status_message_id, format_selector, output_ext))
     finally:
         release_lock(lock_key)
 
@@ -39,7 +40,8 @@ async def _process_video_task_async(
     chat_id: int,
     url: str,
     status_message_id: Optional[int],
-    format_selector: Optional[str]
+    format_selector: Optional[str],
+    output_ext: Optional[str]
 ) -> None:
     bot, session = create_bot_session()
     lang = get_user_lang_sync(chat_id)
@@ -66,7 +68,13 @@ async def _process_video_task_async(
             )
             last_update = now
 
-        video_path = await download_video(url, chat_id, format_selector=format_selector, progress_hook=progress_hook)
+        video_path = await download_video(
+            url,
+            chat_id,
+            format_selector=format_selector,
+            output_ext=output_ext,
+            progress_hook=progress_hook
+        )
         if video_path:
             await send_video(bot, chat_id, video_path, url)
 
