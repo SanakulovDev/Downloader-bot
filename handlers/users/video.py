@@ -158,51 +158,27 @@ async def handle_video_logic(message: Message, url: str):
     lang = await get_user_lang(message.from_user.id, redis_client)
 
     if is_youtube_url(url):
+        # YouTube uchun format tanlashni butunlay o'chiramiz: mavjud bo'lgan eng yaxshi formatni yuklab olamiz.
+        # Preview chiqarsa ham, darhol navbatga qo'shamiz.
         initial_msg = await _send_fast_preview(bot, chat_id, url, lang)
-        info = await _fetch_video_info(url)
-        if not info:
-            if initial_msg:
-                await safe_edit_text(initial_msg, t("no_formats", lang))
-            else:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=t("no_formats", lang),
-                    disable_web_page_preview=True
-                )
-            return
+        status_message_id = initial_msg.message_id if initial_msg else None
 
-        caption, keyboard = _build_format_message(info, lang)
-        if not keyboard:
-            if initial_msg:
-                await safe_edit_text(initial_msg, t("no_formats", lang))
-            else:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=t("no_formats", lang),
-                    disable_web_page_preview=True
-                )
-            return
+        # Agar preview yuborilmagan bo'lsa, oddiy status xabar yuboramiz.
+        if not status_message_id:
+            status_msg = await bot.send_message(
+                chat_id=chat_id,
+                text=t("video_loading", lang),
+                parse_mode='HTML',
+                disable_web_page_preview=True
+            )
+            status_message_id = status_msg.message_id
 
-        if initial_msg:
-            await _edit_preview_with_formats(bot, initial_msg, caption, keyboard)
-        else:
-            thumb = info.get("thumbnail")
-            if thumb:
-                await bot.send_photo(
-                    chat_id=chat_id,
-                    photo=thumb,
-                    caption=caption,
-                    parse_mode='HTML',
-                    reply_markup=keyboard
-                )
-            else:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=caption,
-                    parse_mode='HTML',
-                    reply_markup=keyboard,
-                    disable_web_page_preview=True
-                )
+        process_video_task.delay(
+            chat_id=chat_id,
+            url=url,
+            status_message_id=status_message_id,
+            format_id=None
+        )
         return
 
     # Mijozning link xabarini o'chirish (preview ko'rsatilmasligi uchun)
@@ -249,10 +225,10 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         if not height:
             continue
 
-        # Telegram uchun eng yaxshi yo'l: MP4.
-        # 1080p+ ko'pincha video-only bo'ladi (acodec=none) — bunday paytda audio bilan merge qilamiz.
+        # Telegram uchun odatda MP4 yaxshi, lekin ba'zi videolarda video formatlar faqat WEBM bo'lishi mumkin.
+        # Shuning uchun mp4/webm ikkalasini ham qabul qilamiz.
         ext = fmt.get("ext")
-        if ext != "mp4":
+        if ext not in ("mp4", "webm"):
             continue
 
         format_id = fmt.get("format_id")
@@ -270,12 +246,19 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         if size and size > max_size:
             continue
 
-        # Bir xil height uchun faqat bittasini ko'rsatamiz (eng birinchi topilganini)
+        # Bir xil height uchun bittasini ko'rsatamiz, mp4 mavjud bo'lsa mp4 ni afzal ko'ramiz.
+        # items ichida (height, selector, size, ext) saqlaymiz.
         if height in seen:
+            # Agar oldin webm qo'shilgan bo'lsa, endi mp4 bo'lsa uni almashtiramiz
+            if ext == "mp4":
+                for i, (h, sel, sz, ex) in enumerate(items):
+                    if h == height and ex != "mp4":
+                        items[i] = (height, selector, size, ext)
+                        break
             continue
         seen.add(height)
 
-        items.append((height, selector, size))
+        items.append((height, selector, size, ext))
 
     items.sort(key=lambda x: x[0])
     if not items:
@@ -284,14 +267,14 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     format_lines = []
     buttons = []
     row = []
-    for height, format_selector, size in items:
+    for height, format_selector, size, ext in items:
         size_mb = "?"
         if size:
             size_mb = t("size_mb", lang, mb=round(size / (1024 * 1024)))
         format_lines.append(t("format_line", lang, height=height, size=size_mb))
         row.append(
             InlineKeyboardButton(
-                text=f"{height}p",
+                text=f"{height}p ({ext})",
                 callback_data=f"video_format:{info.get('id')}:{format_selector}"
             )
         )

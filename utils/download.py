@@ -152,17 +152,14 @@ async def download_video(
         # YOUTUBE formatini Shorts va har xil sifatlarga moslab yangilash
         ydl_opts = {
             **COMMON_OPTS,
-            # 1. 480p gacha bo'lgan MP4 (progressive) yoki video-only + audio merge.
-            'format': (
-                format_id if format_id else
-                # Default: 480p gacha bo'lgan MP4 (progressive) yoki video-only + audio merge.
-                'best[height<=480][ext=mp4]/bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-            ),
-            'merge_output_format': 'mp4',
+            # Hech qanday formatni "majbur" qilmaymiz: mavjud bo'lgan eng yaxshi video+audio (yoki best) ni olamiz.
+            'format': 'bv*+ba/b',
+            # Telegram uchun MP4 konteynerga remux (re-encode emas).
             'postprocessors': [{
                 'key': 'FFmpegVideoRemuxer',
                 'preferedformat': 'mp4',
             }],
+            'merge_output_format': 'mp4',
             'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
             'noplaylist': True,
             'cachedir': False,
