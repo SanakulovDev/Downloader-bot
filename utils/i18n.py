@@ -94,6 +94,22 @@ _TEXTS: dict[str, dict[str, str]] = {
         "uz": "Formatni tanlang:",
         "ru": "Выберите формат:",
     },
+    "formats_header": {
+        "uz": "📹 {title}\n👤 {uploader}\n\n{formats}\n\nFormatlar uchun ↓",
+        "ru": "📹 {title}\n👤 {uploader}\n\n{formats}\n\nФорматы для скачивания ↓",
+    },
+    "format_line": {
+        "uz": "🚀  {height}p: {size}",
+        "ru": "🚀  {height}p: {size}",
+    },
+    "size_mb": {
+        "uz": "{mb}MB",
+        "ru": "{mb}MB",
+    },
+    "no_formats": {
+        "uz": "❌ Formatlar topilmadi.",
+        "ru": "❌ Форматы не найдены.",
+    },
     "video_progress": {
         "uz": "⏳ <b>Video yuklanmoqda...</b> {percent}",
         "ru": "⏳ <b>Видео загружается...</b> {percent}",

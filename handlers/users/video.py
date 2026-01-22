@@ -163,25 +163,23 @@ async def handle_video_logic(message: Message, url: str):
     if is_youtube_url(url):
         info = await _fetch_video_info(url)
         if not info:
-            status_msg = await bot.send_message(
+            await bot.send_message(
                 chat_id=chat_id,
-                text=t("video_loading", lang),
-                parse_mode='HTML',
+                text=t("no_formats", lang),
                 disable_web_page_preview=True
-            )
-            process_video_task.delay(
-                chat_id=chat_id,
-                url=url,
-                status_message_id=status_msg.message_id
             )
             return
 
-        title = info.get("title") or "Video"
-        uploader = info.get("uploader") or ""
-        caption = f"{title}\n{uploader}\n\n{t('choose_format', lang)}"
-        keyboard = _build_format_keyboard(info, lang)
-        thumb = info.get("thumbnail")
+        caption, keyboard = _build_format_message(info, lang)
+        if not keyboard:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=t("no_formats", lang),
+                disable_web_page_preview=True
+            )
+            return
 
+        thumb = info.get("thumbnail")
         if thumb:
             await bot.send_photo(
                 chat_id=chat_id,
@@ -224,7 +222,7 @@ def _estimate_size_bytes(fmt: dict, duration: int | None) -> int | None:
     return None
 
 
-def _build_format_keyboard(info: dict, lang: str) -> InlineKeyboardMarkup:
+def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMarkup | None]:
     formats = info.get("formats") or []
     duration = info.get("duration")
     max_size = 1 * 1024 * 1024 * 1024
@@ -244,12 +242,20 @@ def _build_format_keyboard(info: dict, lang: str) -> InlineKeyboardMarkup:
         if height in seen:
             continue
         seen.add(height)
-        items.append((height, fmt.get("format_id")))
+        items.append((height, fmt.get("format_id"), size))
 
     items.sort(key=lambda x: x[0])
+    if not items:
+        return "", None
+
+    format_lines = []
     buttons = []
     row = []
-    for height, format_id in items[:6]:
+    for height, format_id, size in items:
+        size_mb = "?"
+        if size:
+            size_mb = t("size_mb", lang, mb=round(size / (1024 * 1024)))
+        format_lines.append(t("format_line", lang, height=height, size=size_mb))
         row.append(
             InlineKeyboardButton(
                 text=f"{height}p",
@@ -266,7 +272,14 @@ def _build_format_keyboard(info: dict, lang: str) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🎵", callback_data=f"music:{info.get('id')}"),
         InlineKeyboardButton(text="❌", callback_data="delete_this_msg")
     ])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    caption = t(
+        "formats_header",
+        lang,
+        title=info.get("title") or "Video",
+        uploader=info.get("uploader") or "",
+        formats="\n".join(format_lines)
+    )
+    return caption, InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 async def _fetch_video_info(url: str) -> dict | None:
@@ -275,6 +288,14 @@ async def _fetch_video_info(url: str) -> dict | None:
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios'],
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            },
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False)
