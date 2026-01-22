@@ -12,6 +12,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String, nullable=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_active: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    language: Mapped[str] = mapped_column(String, nullable=True)
 
     def __repr__(self):
         return f"<User(id={self.id}, full_name='{self.full_name}')>"

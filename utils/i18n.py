@@ -7,24 +7,24 @@ SUPPORTED_LANGS = {"uz", "ru"}
 
 _TEXTS: dict[str, dict[str, str]] = {
     "choose_language": {
-        "uz": "O'zingizga mos tilni tanlang:",
-        "ru": "Выберите удобный язык:",
+        "uz": "Xurmatli mijoz, \nO'zingizga mos tilni tanlang:",
+        "ru": "Уважаемый клиент, \nВыберите удобный язык:",
     },
     "lang_uz": {
-        "uz": "O'zbekcha",
-        "ru": "Узбекский",
+        "uz": "🇺🇿 O'zbekcha",
+        "ru": "🇺🇿 Узбекский",
     },
     "lang_ru": {
-        "uz": "Русский",
-        "ru": "Русский",
+        "uz": "🇷🇺 Русский",
+        "ru": "🇷🇺 Русский",
     },
     "language_changed_uz": {
-        "uz": "Til o'zgartirildi: O'zbekcha",
-        "ru": "Язык изменен: Узбекский",
+        "uz": "🇺🇿 Til o'zgartirildi: O'zbekcha",
+        "ru": "🇷🇺 Язык изменен: Узбекский",
     },
     "language_changed_ru": {
-        "uz": "Til o'zgartirildi: Русский",
-        "ru": "Язык изменен: Русский",
+        "uz": "🇷🇺 Til o'zgartirildi: Русский",
+        "ru": "🇷🇺 Язык изменен: Русский",
     },
     "ask_name": {
         "uz": "👋 Assalomu alaykum! Botdan foydalanish uchun ismingizni kiriting:",
@@ -87,8 +87,8 @@ _TEXTS: dict[str, dict[str, str]] = {
         "ru": "🎵 Результаты (страница {page}):",
     },
     "search_tip": {
-        "uz": "Musiqa qidirmoqchimisiz menga yozing va men bir zumda topib beraman.",
-        "ru": "Хотите найти музыку? Напишите мне, и я быстро найду.",
+        "uz": "",
+        "ru": "",
     },
     "cancel": {
         "uz": "❌ Bekor qilish",

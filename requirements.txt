@@ -13,3 +13,5 @@ python-multipart
 jinja2
 ytmusicapi
 celery>=5.3.6
+alembic
+pDOc
