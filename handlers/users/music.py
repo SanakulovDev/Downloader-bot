@@ -280,6 +280,39 @@ async def handle_music_callback(callback: CallbackQuery):
         status_message_id=status_msg.message_id if status_msg else None
     )
 
+
+@router.callback_query(F.data.startswith('artist:'))
+async def handle_artist_songs(callback: CallbackQuery, state: FSMContext):
+    """Muallifning boshqa qo'shiqlarini ko'rsatish"""
+    video_id = callback.data.split(':')[1]
+    from loader import redis_client
+
+    if not redis_client:
+        await callback.answer("❌ Database error", show_alert=True)
+        return
+
+    artist_name = await redis_client.get(f"artist:{video_id}")
+    if not artist_name:
+        await callback.answer("❌ Muallif topilmadi", show_alert=True)
+        return
+
+    if isinstance(artist_name, bytes):
+        artist_name = artist_name.decode()
+
+    await callback.answer("🔍 Qidirilmoqda...", show_alert=False)
+    status_msg = await callback.message.answer(
+        f"🎤 <b>{artist_name}</b> qo'shiqlari qidirilmoqda...",
+        parse_mode='HTML'
+    )
+
+    results = await search_music(artist_name)
+    if not results:
+        await status_msg.edit_text("❌ Hech narsa topilmadi.")
+        return
+
+    await state.update_data(search_results=results, search_query=artist_name)
+    await show_music_page(callback.message.chat.id, results, 0, status_msg)
+
 @router.callback_query(F.data == 'delete_this_msg')
 async def handle_delete_message_callback(callback: CallbackQuery):
     """Xabar o'chirish tugmasi bosilganda"""

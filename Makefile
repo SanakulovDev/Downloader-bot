@@ -6,12 +6,6 @@ DOCKER_COMPOSE := docker-compose --env-file app/.env
 
 .PHONY: build up down logs restart clean exec
 
-make setup:
-	$(DOCKER_COMPOSE) build && $(DOCKER_COMPOSE) down && $(DOCKER_COMPOSE) up -d
-
-build:
-	$(DOCKER_COMPOSE) build
-
 up:
 	$(DOCKER_COMPOSE) up -d
 
@@ -30,6 +24,8 @@ restart: down up
 pro:
 	clear && git pull origin main && make restart && make logs
 
+make setup:
+	git pull origin main && $(DOCKER_COMPOSE) build && $(DOCKER_COMPOSE) down && $(DOCKER_COMPOSE) up -d && $(DOCKER_COMPOSE) logs -f
 clean:
 	$(DOCKER_COMPOSE) down -v
 	find . -type d -name "__pycache__" -exec rm -rf {} +

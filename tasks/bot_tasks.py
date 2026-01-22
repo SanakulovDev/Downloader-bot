@@ -19,6 +19,7 @@ load_dotenv('app/.env')
 
 logger = logging.getLogger(__name__)
 IDEMPOTENCY_TTL_SECONDS = int(os.getenv('IDEMPOTENCY_TTL_SECONDS', '900'))
+ARTIST_CACHE_TTL_SECONDS = int(os.getenv('ARTIST_CACHE_TTL_SECONDS', '3600'))
 
 
 def _get_redis():
@@ -161,7 +162,15 @@ async def _process_music_task_async(
     try:
         audio_path, filename = await download_audio(video_id, chat_id)
         if audio_path:
+            artist_name = "Unknown"
+            if " - " in filename:
+                artist_name = filename.rsplit(" - ", 1)[1].replace(".m4a", "")
+            _cache_artist_name(video_id, artist_name)
+
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🎤 Muallif qo'shiqlari", callback_data=f"artist:{video_id}")
+                ],
                 [
                     InlineKeyboardButton(text="❤️", callback_data=f"like:{video_id}"),
                     InlineKeyboardButton(text="❌", callback_data="delete_this_msg")
@@ -229,3 +238,13 @@ async def _delete_message_only(chat_id: int, message_id: int) -> None:
         pass
     finally:
         await session.close()
+
+
+def _cache_artist_name(video_id: str, artist_name: str) -> None:
+    client = _get_redis()
+    if not client or not artist_name:
+        return
+    try:
+        client.setex(f"artist:{video_id}", ARTIST_CACHE_TTL_SECONDS, artist_name)
+    except Exception:
+        pass
