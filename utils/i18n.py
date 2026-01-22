@@ -98,6 +98,10 @@ _TEXTS: dict[str, dict[str, str]] = {
         "uz": "📹 {title}\n👤 {uploader}\n\n{formats}\n\nFormatlar uchun ↓",
         "ru": "📹 {title}\n👤 {uploader}\n\n{formats}\n\nФорматы для скачивания ↓",
     },
+    "preview_header": {
+        "uz": "📹 {title}\n👤 {uploader}",
+        "ru": "📹 {title}\n👤 {uploader}",
+    },
     "format_line": {
         "uz": "🚀  {height}p: {size}",
         "ru": "🚀  {height}p: {size}",
@@ -113,6 +117,10 @@ _TEXTS: dict[str, dict[str, str]] = {
     "video_progress": {
         "uz": "⏳ <b>Video yuklanmoqda...</b> {percent}",
         "ru": "⏳ <b>Видео загружается...</b> {percent}",
+    },
+    "formats_loading": {
+        "uz": "⏳ Formatlar yuklanmoqda...",
+        "ru": "⏳ Форматы загружаются...",
     },
     "cancel": {
         "uz": "❌ Bekor qilish",

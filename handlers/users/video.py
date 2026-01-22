@@ -6,11 +6,12 @@ from shazamio import Shazam
 import logging
 import asyncio
 import yt_dlp
+import aiohttp
 
 from loader import dp, TMP_DIR
 from states.bot_states import BotStates
 from keyboards.default_keyboards import main_menu
-from utils.validation import is_youtube_url, is_instagram_url, extract_url
+from utils.validation import is_youtube_url, is_instagram_url, extract_url, extract_youtube_id
 from tasks.bot_tasks import process_video_task
 from utils.search import search_music
 from utils.download import COMMON_OPTS
@@ -152,52 +153,62 @@ async def handle_video_logic(message: Message, url: str):
     """
     chat_id = message.chat.id
     
-    # Mijozning link xabarini o'chirish (preview ko'rsatilmasligi uchun)
-    deleted = await safe_delete_message(message)
-    if not deleted:
-        logger.warning("Xabarni o'chirib bo'lmadi.")
-    
     from loader import bot
     from loader import redis_client
     lang = await get_user_lang(message.from_user.id, redis_client)
 
     if is_youtube_url(url):
+        initial_msg = await _send_fast_preview(bot, chat_id, url, lang)
         info = await _fetch_video_info(url)
         if not info:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=t("no_formats", lang),
-                disable_web_page_preview=True
-            )
+            if initial_msg:
+                await safe_edit_text(initial_msg, t("no_formats", lang))
+            else:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=t("no_formats", lang),
+                    disable_web_page_preview=True
+                )
             return
 
         caption, keyboard = _build_format_message(info, lang)
         if not keyboard:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=t("no_formats", lang),
-                disable_web_page_preview=True
-            )
+            if initial_msg:
+                await safe_edit_text(initial_msg, t("no_formats", lang))
+            else:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=t("no_formats", lang),
+                    disable_web_page_preview=True
+                )
             return
 
-        thumb = info.get("thumbnail")
-        if thumb:
-            await bot.send_photo(
-                chat_id=chat_id,
-                photo=thumb,
-                caption=caption,
-                parse_mode='HTML',
-                reply_markup=keyboard
-            )
+        if initial_msg:
+            await _edit_preview_with_formats(bot, initial_msg, caption, keyboard)
         else:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=caption,
-                parse_mode='HTML',
-                reply_markup=keyboard,
-                disable_web_page_preview=True
-            )
+            thumb = info.get("thumbnail")
+            if thumb:
+                await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=thumb,
+                    caption=caption,
+                    parse_mode='HTML',
+                    reply_markup=keyboard
+                )
+            else:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=caption,
+                    parse_mode='HTML',
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True
+                )
         return
+
+    # Mijozning link xabarini o'chirish (preview ko'rsatilmasligi uchun)
+    deleted = await safe_delete_message(message)
+    if not deleted:
+        logger.warning("Xabarni o'chirib bo'lmadi.")
 
     # Instagram va boshqa holatlar uchun eski oqim
     status_msg = await bot.send_message(
@@ -297,6 +308,64 @@ async def _fetch_video_info(url: str) -> dict | None:
         return await asyncio.to_thread(_extract)
     except Exception:
         return None
+
+
+async def _send_fast_preview(bot, chat_id: int, url: str, lang: str):
+    video_id = extract_youtube_id(url)
+    if not video_id:
+        return None
+    oembed = await _fetch_oembed(url)
+    title = oembed.get("title") if oembed else None
+    author = oembed.get("author_name") if oembed else None
+    thumb = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+    caption = t("preview_header", lang, title=title or "Video", uploader=author or "")
+    try:
+        return await bot.send_photo(
+            chat_id=chat_id,
+            photo=thumb,
+            caption=caption,
+            parse_mode='HTML'
+        )
+    except Exception:
+        return await bot.send_message(
+            chat_id=chat_id,
+            text=caption,
+            parse_mode='HTML',
+            disable_web_page_preview=True
+        )
+
+
+async def _fetch_oembed(url: str) -> dict:
+    oembed_url = f"https://www.youtube.com/oembed?url={url}&format=json"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(oembed_url, timeout=2) as resp:
+                if resp.status != 200:
+                    return {}
+                return await resp.json()
+    except Exception:
+        return {}
+
+
+async def _edit_preview_with_formats(bot, message: Message, caption: str, keyboard: InlineKeyboardMarkup):
+    try:
+        await bot.edit_message_reply_markup(
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            reply_markup=keyboard
+        )
+    except Exception:
+        pass
+    try:
+        await bot.edit_message_caption(
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            caption=caption,
+            parse_mode='HTML'
+        )
+    except Exception:
+        await safe_edit_text(message, caption, reply_markup=keyboard, parse_mode='HTML')
 
 
 @router.callback_query(F.data.startswith('video_format:'))

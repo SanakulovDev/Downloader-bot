@@ -13,33 +13,26 @@ logger = logging.getLogger(__name__)
 
 # --- FIX: LIST FORMAT FOR REMOTE COMPONENTS ---
 COMMON_OPTS = {
-    # 1. Cookie fayli
     'cookiefile': '/app/cookies.txt',
-    
-    # 2. IPv6
-    'force_ipv4': False, 
-    'force_ipv6': True,
 
-    # 3. MIJOZ: WEB
+    'force_ipv4': True,
+
     'extractor_args': {
         'youtube': {
-            'player_client': ['web'],
+            'player_client': ['android'],
         }
     },
-    
-    # 4. REMOTE COMPONENTS (TUZATILDI: LIST FORMATI)
-    # Oldingi xato: {'ejs': 'github'} (Dict)
-    # To'g'ri variant: ['ejs:github'] (List)
-    'remote_components': ['ejs:github'],
 
-    # 5. User Agent
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'user_agent': 'Mozilla/5.0 (Linux; Android 11; Pixel 5)',
 
     'quiet': True,
     'no_warnings': True,
-    'ignoreerrors': True,
-    'nocheckcertificate': True,
-    'http_chunk_size': 10485760,
+
+    'cachedir': False,
+    'noplaylist': True,
+
+    'retries': 2,
+    'socket_timeout': 10,
 }
 
 def _map_download_error(err_msg: str, media_type: str) -> Exception:
