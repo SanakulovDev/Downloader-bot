@@ -46,10 +46,18 @@ async def show_music_page(chat_id, results, page, message_to_edit: Message = Non
     
     if nav_buttons:
         keyboard.append(nav_buttons)
+    
+    # Cancel button
+    keyboard.append([
+        InlineKeyboardButton(text="❌ Bekor qilish", callback_data="delete_this_msg")
+    ])
         
     kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
     
-    text = f"🎵 Natijalar (Sahifa {page+1}):"
+    text = (
+        "Musiqa qidirmoqchimisiz menga yozing va men bir zumda topib beraman.\n\n"
+        f"🎵 Natijalar (Sahifa {page+1}):"
+    )
     
     if message_to_edit:
         await message_to_edit.edit_text(text, reply_markup=kb)
@@ -212,7 +220,12 @@ async def handle_music_logic(message: Message, state: FSMContext):
     if text.startswith("/"):
         return
 
-    status_msg = await message.answer(f"🔍 Qidirilmoqda: <b>{text}</b>...", parse_mode='HTML')
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    status_msg = await message.answer("⏳ <b>Musiqangiz yuklanmoqda...</b>", parse_mode='HTML')
     
     # 20 ta natija olish (pagination uchun)
     results = await search_music(text) 
@@ -300,7 +313,7 @@ async def handle_artist_songs(callback: CallbackQuery, state: FSMContext):
         artist_name = artist_name.decode()
 
     await callback.answer("🔍 Qidirilmoqda...", show_alert=False)
-    status_msg = await callback.message.answer(
+    status_msg = await callback.message.reply(
         f"🎤 <b>{artist_name}</b> qo'shiqlari qidirilmoqda...",
         parse_mode='HTML'
     )
