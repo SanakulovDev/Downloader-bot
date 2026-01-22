@@ -1,14 +1,9 @@
-import os
 from celery import Celery
-from core.env import load_env
+from core.config import get_settings
 
-load_env()
-
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-REDIS_PORT = os.getenv('REDIS_PORT', '6379')
-
-broker_url = os.getenv('CELERY_BROKER_URL', f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
-result_backend = os.getenv('CELERY_RESULT_BACKEND', broker_url)
+settings = get_settings()
+broker_url = settings.celery_broker_url or f"redis://{settings.redis_host}:{settings.redis_port}/0"
+result_backend = settings.celery_result_backend or broker_url
 
 celery_app = Celery(
     'downloader_bot',

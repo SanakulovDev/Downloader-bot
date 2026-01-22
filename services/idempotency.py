@@ -1,11 +1,5 @@
-import os
-
-from core.env import load_env
+from core.config import get_settings
 from services.redis_client import get_sync_redis
-
-load_env()
-
-IDEMPOTENCY_TTL_SECONDS = int(os.getenv('IDEMPOTENCY_TTL_SECONDS', '900'))
 
 
 def acquire_lock(key: str) -> bool:
@@ -13,7 +7,8 @@ def acquire_lock(key: str) -> bool:
     if not client:
         return True
     try:
-        return bool(client.set(key, "1", nx=True, ex=IDEMPOTENCY_TTL_SECONDS))
+        ttl = get_settings().idempotency_ttl_seconds
+        return bool(client.set(key, "1", nx=True, ex=ttl))
     except Exception:
         return True
 

@@ -1,11 +1,5 @@
-import os
-
-from core.env import load_env
+from core.config import get_settings
 from services.redis_client import get_sync_redis
-
-load_env()
-
-ARTIST_CACHE_TTL_SECONDS = int(os.getenv('ARTIST_CACHE_TTL_SECONDS', '3600'))
 
 
 def cache_artist_name(video_id: str, artist_name: str) -> None:
@@ -15,6 +9,7 @@ def cache_artist_name(video_id: str, artist_name: str) -> None:
     if not client:
         return
     try:
-        client.setex(f"artist:{video_id}", ARTIST_CACHE_TTL_SECONDS, artist_name)
+        ttl = get_settings().artist_cache_ttl_seconds
+        client.setex(f"artist:{video_id}", ttl, artist_name)
     except Exception:
         pass

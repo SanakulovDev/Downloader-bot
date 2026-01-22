@@ -1,8 +1,7 @@
-import os
-
 from aiogram import Bot
 from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 
+from core.config import get_settings
 from utils.validation import extract_youtube_id, is_youtube_url
 
 
@@ -39,10 +38,11 @@ async def send_video(
     video_path: str,
     url: str
 ) -> None:
+    settings = get_settings()
     await bot.send_video(
         chat_id=chat_id,
         video=FSInputFile(video_path),
-        caption="🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot"),
+        caption="🤖 " + settings.telegram_nickname,
         reply_markup=build_video_keyboard(url)
     )
 
@@ -54,10 +54,11 @@ async def send_audio(
     filename: str,
     video_id: str
 ) -> None:
+    settings = get_settings()
     await bot.send_audio(
         chat_id=chat_id,
         audio=FSInputFile(audio_path, filename=filename),
-        caption=f"🎵 {filename.replace('.m4a', '')} \n🤖 " + (os.getenv("TELEGRAM_NICKNAME") or "@InstantAudioBot"),
+        caption=f"🎵 {filename.replace('.m4a', '')} \n🤖 " + settings.telegram_nickname,
         title=filename.replace('.m4a', ''),
         reply_markup=build_audio_keyboard(video_id)
     )

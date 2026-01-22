@@ -9,9 +9,9 @@ import logging
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from dotenv import load_dotenv
+from core.env import load_env
 
-load_dotenv('app/.env')
+load_env()
 
 BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 WEBHOOK_PATH = "/webhook"
@@ -151,4 +151,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

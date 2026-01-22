@@ -2,15 +2,14 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.session.aiohttp import AiohttpSession
 import os
-from core.env import load_env
+from core.config import get_settings
 import logging
 
-load_env()
-
-BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
-TMP_DIR = os.getenv('TMP_DIR', '/dev/shm/tmp')
+settings = get_settings()
+BOT_TOKEN = settings.bot_token
+REDIS_HOST = settings.redis_host
+REDIS_PORT = settings.redis_port
+TMP_DIR = settings.tmp_dir
 
 # Logging
 logging.basicConfig(
