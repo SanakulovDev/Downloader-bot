@@ -24,7 +24,7 @@ async def show_music_page(chat_id, results, page, message_to_edit: Message = Non
     row = []
     for i, res in enumerate(current_items):
         button = InlineKeyboardButton(
-            text=f"🎵 {res['title'][:30]}...", # Shorten title for 2 columns
+            text=f"🎵 {res['title'][:30] + '...' if len(res['title']) > 30 else res['title']}", # Smart truncate
             callback_data=f"music:{res['id']}"
         )
         row.append(button)

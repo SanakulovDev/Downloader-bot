@@ -28,8 +28,8 @@ async def search_music(query: str):
         
         final_results = []
         for r in results:
-            # Format title as "Artist - Title" for better visibility in buttons
-            display_title = f"{r['artist']} - {r['title']}"
+            # Format title as "Title - Artist" for better visibility in buttons
+            display_title = f"{r['title']} - {r['artist']}"
             
             final_results.append({
                 'id': r['id'],
