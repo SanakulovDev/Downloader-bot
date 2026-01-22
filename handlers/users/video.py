@@ -177,7 +177,7 @@ async def handle_video_logic(message: Message, url: str):
             chat_id=chat_id,
             url=url,
             status_message_id=status_message_id,
-            format_id=None
+            format_height=None
         )
         return
 
