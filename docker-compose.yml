@@ -87,6 +87,28 @@ services:
         soft: 100000  
         hard: 100000
 
+  celery-worker:
+    build: .
+    container_name: downloader_celery_worker
+    restart: always
+    command: celery -A tasks.celery_app worker -l info
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+      - /dev/shm:/dev/shm
+    env_file:
+      - ./app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PORT=6379
+    network_mode: "host"
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+
 volumes:
   redis_data:
   postgres_data:

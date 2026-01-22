@@ -13,7 +13,8 @@ result_backend = os.getenv('CELERY_RESULT_BACKEND', broker_url)
 celery_app = Celery(
     'downloader_bot',
     broker=broker_url,
-    backend=result_backend
+    backend=result_backend,
+    include=['tasks.bot_tasks']
 )
 
 celery_app.conf.update(
