@@ -162,3 +162,12 @@ async def handle_video_logic(message: Message, url: str):
     # Queue handler o'zi `utils/download.py` dagi funksiyani chaqiradi
     # user_msg o'rniga None yuboramiz, chunki xabar o'chirilgan
     await DOWNLOAD_QUEUE.put(('video', chat_id, url, {'user_msg': None, 'status_msg': status_msg, 'original_chat_id': chat_id}))
+
+@router.callback_query(F.data == 'delete_this_msg')
+async def handle_delete_message_callback(callback: CallbackQuery):
+    """Xabar o'chirish tugmasi bosilganda"""
+    try:
+        await callback.message.delete()
+        await callback.answer("✅ Xabar o'chirildi", show_alert=False)
+    except Exception as e:
+        await callback.answer("❌ O'chirib bo'lmadi", show_alert=True)

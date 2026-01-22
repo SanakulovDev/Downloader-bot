@@ -35,8 +35,16 @@ async def process_video_task(chat_id, url, msgs):
                 vid_id = extract_youtube_id(url)
                 if vid_id:
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="🎵 Musiqasini yuklash", callback_data=f"music:{vid_id}")]
+                        [
+                            InlineKeyboardButton(text="🎵 Musiqasini yuklash", callback_data=f"music:{vid_id}"),
+                            InlineKeyboardButton(text="❌", callback_data="delete_this_msg")
+                        ]
                     ])
+            else:
+                # Instagram uchun ham X tugmasini qo'shamiz
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="❌", callback_data="delete_this_msg")]
+                ])
 
             # Agar user_msg None bo'lsa (xabar o'chirilgan), bot.send_video() ishlatamiz
             from loader import bot
