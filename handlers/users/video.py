@@ -243,104 +243,82 @@ def _estimate_size_bytes(fmt: dict, duration: int | None) -> int | None:
 def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMarkup | None]:
     formats = info.get("formats") or []
     duration = info.get("duration")
-    max_size = 2 * 1024 * 1024 * 1024
-    items = []
-    seen = set()
-    audio_sel_any = "bestaudio/best"
+    max_size = 2 * 1024 * 1024 * 1024 # 2GB (Local Bot API uchun)
+    
+    # Bizga kerakli sifatlar ro'yxati
+    target_heights = {144, 240, 360, 480, 720, 1080}
+    best_formats = {} # {height: format_dict}
+
     for fmt in formats:
-        # Debug logging
-        fid = fmt.get('format_id')
-        h = fmt.get('height')
-        vc = fmt.get('vcodec')
-        ac = fmt.get('acodec')
-        ext = fmt.get('ext')
-        logger.info(f"Checking format {fid}: h={h}, vc={vc}, ac={ac}, ext={ext}")
-
-        # Faqat video streamlarni ko'rsatamiz
-        if fmt.get("vcodec") == "none":
-            logger.info(f"Skipping {fid}: vcodec is none")
-            continue
         height = fmt.get("height")
-        if not height:
-            logger.info(f"Skipping {fid}: height missing")
+        if height not in target_heights:
+            continue
+            
+        # Storyboard yoki videosiz oqimlarni tashlab ketamiz
+        if fmt.get("vcodec") == "none" or fmt.get("ext") == "mhtml":
             continue
 
-        # Telegram uchun odatda MP4 yaxshi, lekin ba'zi videolarda faqat WEBM bo'lishi mumkin.
-        # Shuning uchun mp4/webm ikkalasini ham qabul qilamiz.
-        ext = fmt.get("ext")
-        if ext not in {"mp4", "webm", "mkv"}:
-            logger.info(f"Skipping {fid}: invalid ext {ext}")
-            continue
-
-        format_id = fmt.get("format_id")
-        if not format_id:
-            continue
-
-        # Agar progressive bo'lsa (audio+video), aynan o'sha format_id ni beramiz.
-        # Agar video-only bo'lsa, audio bilan birga selector yasaymiz.
-        if fmt.get("acodec") and fmt.get("acodec") != "none":
-            selector = str(format_id)
+        # Har bir sifat uchun eng yaxshisini tanlaymiz (MP4 afzal)
+        current_best = best_formats.get(height)
+        if not current_best:
+            best_formats[height] = fmt
         else:
-            selector = f"{format_id}+{audio_sel_any}"
+            # Agar yangi format MP4 bo'lsa yoki bitrate yaxshiroq bo'lsa, almashtiramiz
+            if fmt.get("ext") == "mp4" and current_best.get("ext") != "mp4":
+                best_formats[height] = fmt
+            elif fmt.get("tbr", 0) > current_best.get("tbr", 0):
+                best_formats[height] = fmt
+
+    items = []
+    for height in sorted(best_formats.keys()):
+        fmt = best_formats[height]
+        format_id = fmt.get("format_id")
+        
+        # AGAR formatda audio bo'lmasa (DASH), audio qo'shamiz
+        # 'bestaudio' tanlovi FFmpeg orqali tezda birlashtiriladi
+        if fmt.get("acodec") == "none":
+            selector = f"{format_id}+bestaudio[ext=m4a]/bestaudio"
+        else:
+            selector = format_id
 
         size = _estimate_size_bytes(fmt, duration)
         if size and size > max_size:
-            logger.info(f"Skipping {fid}: size too big")
             continue
+            
+        items.append((height, selector, size, fmt.get("ext", "mp4")))
 
-        # Bir xil height uchun bittasini ko'rsatamiz, mp4 mavjud bo'lsa mp4 ni afzal ko'ramiz.
-        # items ichida (height, selector, size, ext) saqlaymiz.
-        if height in seen:
-            # Agar oldin webm qo'shilgan bo'lsa, endi mp4 bo'lsa uni almashtiramiz
-            if ext == "mp4":
-                for i, (h, sel, sz, ex) in enumerate(items):
-                    if h == height and ex != "mp4":
-                        items[i] = (height, selector, size, ext)
-                        break
-            continue
-        seen.add(height)
-
-        items.append((height, selector, size, ext))
-
-    items.sort(key=lambda x: x[0])
-    logger.info(f"Formats found after filter: {len(items)}")
     if not items:
-        # FALLBACK for restricted videos (like format 18)
-        # If no strict matches found, try to find any MP4 video
-        for fmt in formats:
-            if fmt.get('format_id') == '18':
-                 logger.info("Fallback: Adding format 18")
-                 items.append((360, "18", _estimate_size_bytes(fmt, duration), "mp4"))
-                 break
-        
-        if not items:
-             logger.info("No items found even after fallback.")
-             return "", None
+        return "", None
 
     format_lines = []
     buttons = []
     row = []
+    
     for height, selector, size, ext in items:
         size_mb = "?"
         if size:
             size_mb = t("size_mb", lang, mb=round(size / (1024 * 1024)))
+        
         format_lines.append(t("format_line", lang, height=height, size=size_mb))
+        
         row.append(
             InlineKeyboardButton(
-                text=f"{height}p ({ext})",
+                text=f"{height}p", # ext ni qisqartirdik joy tejash uchun
                 callback_data=f"video_format:{info.get('id')}:{selector}:{ext}"
             )
         )
-        if len(row) == 2:
+        if len(row) == 3: # 3 tadan tugma bir qatorda
             buttons.append(row)
             row = []
     if row:
         buttons.append(row)
 
+    # Pastki boshqaruv tugmalari
     buttons.append([
-        InlineKeyboardButton(text="🎵", callback_data=f"music:{info.get('id')}"),
+        InlineKeyboardButton(text="🎵 MP3", callback_data=f"music:{info.get('id')}"),
         InlineKeyboardButton(text="❌", callback_data="delete_this_msg")
     ])
+
     caption = t(
         "formats_header",
         lang,
@@ -349,7 +327,6 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         formats="\n".join(format_lines)
     )
     return caption, InlineKeyboardMarkup(inline_keyboard=buttons)
-
 
 async def _fetch_video_info(url: str) -> dict | None:
     from loader import redis_client
