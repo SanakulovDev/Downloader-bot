@@ -470,14 +470,24 @@ async def handle_video_format(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id, redis_client)
 
     await callback.answer(t("video_loading", lang), show_alert=False)
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    try:
-        await callback.message.edit_caption(t("video_loading", lang), parse_mode='HTML')
-    except Exception:
-        await safe_edit_text(callback.message, t("video_loading", lang), parse_mode='HTML')
+    status_message_id = callback.message.message_id
+    deleted = await safe_delete_message(callback.message)
+    if deleted:
+        status_msg = await callback.message.answer(
+            t("video_loading", lang),
+            parse_mode='HTML',
+            disable_web_page_preview=True
+        )
+        status_message_id = status_msg.message_id
+    else:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        try:
+            await callback.message.edit_caption(t("video_loading", lang), parse_mode='HTML')
+        except Exception:
+            await safe_edit_text(callback.message, t("video_loading", lang), parse_mode='HTML')
 
     url = f"https://www.youtube.com/watch?v={video_id}"
     # process_video_task.delay(
@@ -491,7 +501,7 @@ async def handle_video_format(callback: CallbackQuery):
     submit_video_task(
         chat_id=callback.message.chat.id,
         url=url,
-        status_message_id=callback.message.message_id,
+        status_message_id=status_message_id,
         format_selector=format_selector,
         output_ext=output_ext
     )
