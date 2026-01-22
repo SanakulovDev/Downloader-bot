@@ -1,8 +1,8 @@
 import os
 from celery import Celery
-from dotenv import load_dotenv
+from core.env import load_env
 
-load_dotenv('app/.env')
+load_env()
 
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = os.getenv('REDIS_PORT', '6379')

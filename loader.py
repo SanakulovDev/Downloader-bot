@@ -2,10 +2,10 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.session.aiohttp import AiohttpSession
 import os
-from dotenv import load_dotenv
+from core.env import load_env
 import logging
 
-load_dotenv('app/.env')
+load_env()
 
 BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
