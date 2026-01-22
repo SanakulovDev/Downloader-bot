@@ -427,21 +427,17 @@ async def _fetch_oembed(url: str) -> dict:
 
 async def _edit_preview_with_formats(bot, message: Message, caption: str, keyboard: InlineKeyboardMarkup):
     try:
-        await bot.edit_message_reply_markup(
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=keyboard
-        )
-    except Exception:
-        pass
-    try:
+        # Eng ishonchli usul: Caption va Markupni birga yangilash
         await bot.edit_message_caption(
             chat_id=message.chat.id,
             message_id=message.message_id,
             caption=caption,
-            parse_mode='HTML'
+            parse_mode='HTML',
+            reply_markup=keyboard
         )
-    except Exception:
+    except Exception as e:
+        logger.error(f"Edit preview error: {e}")
+        # Agar rasm o'rniga oddiy text bo'lib qolgan bo'lsa yoki boshqa xato:
         await safe_edit_text(message, caption, reply_markup=keyboard, parse_mode='HTML')
 
 
