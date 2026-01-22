@@ -251,43 +251,71 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
 
     for fmt in formats:
         height = fmt.get("height")
-        if height not in target_heights:
+        if not height or height not in target_heights:
             continue
             
-        # Storyboard yoki videosiz oqimlarni tashlab ketamiz
-        if fmt.get("vcodec") == "none" or fmt.get("ext") == "mhtml":
+        # Faqat videosiz formatlarni tashlab ketamiz (storyboard, audio-only)
+        vcodec = fmt.get("vcodec")
+        if not vcodec or vcodec == "none":
+            continue
+            
+        # Storyboard formatlarni tashlab ketamiz
+        if fmt.get("ext") == "mhtml":
             continue
 
-        # Har bir sifat uchun eng yaxshisini tanlaymiz (MP4 afzal)
+        # Har bir sifat uchun eng yaxshisini tanlaymiz
         current_best = best_formats.get(height)
         if not current_best:
             best_formats[height] = fmt
         else:
-            # Agar yangi format MP4 bo'lsa yoki bitrate yaxshiroq bo'lsa, almashtiramiz
-            if fmt.get("ext") == "mp4" and current_best.get("ext") != "mp4":
+            # Birinchi, progressive formatni (audio+video) afzal ko'ramiz
+            current_has_audio = current_best.get("acodec") and current_best.get("acodec") != "none"
+            new_has_audio = fmt.get("acodec") and fmt.get("acodec") != "none"
+            
+            if new_has_audio and not current_has_audio:
                 best_formats[height] = fmt
-            elif fmt.get("tbr", 0) > current_best.get("tbr", 0):
-                best_formats[height] = fmt
+            elif new_has_audio == current_has_audio:
+                # Agar ikkala format ham bir xil (yoki ikkalasi ham DASH), MP4 ni afzal ko'ramiz
+                if fmt.get("ext") == "mp4" and current_best.get("ext") != "mp4":
+                    best_formats[height] = fmt
+                elif fmt.get("ext") == current_best.get("ext"):
+                    # Bir xil format bo'lsa, bitrate yaxshirogini tanlaymiz
+                    if fmt.get("tbr", 0) > current_best.get("tbr", 0):
+                        best_formats[height] = fmt
 
     items = []
     for height in sorted(best_formats.keys()):
         fmt = best_formats[height]
         format_id = fmt.get("format_id")
         
-        # AGAR formatda audio bo'lmasa (DASH), audio qo'shamiz
-        # 'bestaudio' tanlovi FFmpeg orqali tezda birlashtiriladi
-        if fmt.get("acodec") == "none":
-            selector = f"{format_id}+bestaudio[ext=m4a]/bestaudio"
+        # AGAR formatda audio bo'lmasa (DASH video), audio qo'shamiz
+        # yt-dlp avtomatik FFmpeg orqali birlashtirib beradi
+        acodec = fmt.get("acodec")
+        if not acodec or acodec == "none":
+            # DASH video + eng yaxshi audio
+            selector = f"{format_id}+bestaudio[ext=m4a]/bestaudio/best"
         else:
+            # Progressive format (audio+video birgalikda)
             selector = format_id
 
         size = _estimate_size_bytes(fmt, duration)
         if size and size > max_size:
             continue
             
-        items.append((height, selector, size, fmt.get("ext", "mp4")))
+        ext = fmt.get("ext", "mp4")
+        items.append((height, selector, size, ext))
 
+    # Agar hech narsa topilmasa, fallback sifatida format 18 ni ishlatamiz
     if not items:
+        logger.warning("No formats found with target heights, trying fallback format 18")
+        for fmt in formats:
+            if fmt.get('format_id') == '18':
+                logger.info("Using fallback format 18 (360p progressive)")
+                items.append((360, "18", _estimate_size_bytes(fmt, duration), "mp4"))
+                break
+    
+    if not items:
+        logger.error("No suitable formats found at all")
         return "", None
 
     format_lines = []
