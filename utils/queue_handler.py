@@ -36,7 +36,7 @@ async def process_video_task(chat_id, url, msgs):
                 if vid_id:
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
                         [
-                            InlineKeyboardButton(text="🎵 Musiqasini yuklash", callback_data=f"music:{vid_id}"),
+                            InlineKeyboardButton(text="🎵", callback_data=f"music:{vid_id}"),
                             InlineKeyboardButton(text="❌", callback_data="delete_this_msg")
                         ]
                     ])
