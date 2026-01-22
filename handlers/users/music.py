@@ -7,7 +7,7 @@ import logging
 from loader import dp
 from states.bot_states import BotStates
 from utils.search import search_music
-from utils.queue_handler import DOWNLOAD_QUEUE
+from tasks.bot_tasks import process_music_task
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -255,29 +255,30 @@ async def handle_music_callback(callback: CallbackQuery):
         
     await callback.answer("⏳ Musiqa yuklanmoqda...", show_alert=False)
     
-    # Queue ga qo'shish
-    position = DOWNLOAD_QUEUE.qsize() + 1
+    # Celery taskga yuboramiz (parallel bajariladi)
     status_msg = None
     
     try:
         if is_media:
             # Reply to the video message
-            status_msg = await callback.message.reply(f"⏳ <b>Navbatga qo'shildi...</b>\nSizning navbatingiz: {position}", parse_mode='HTML')
+            status_msg = await callback.message.reply(
+                "⏳ <b>Musiqangiz yuklanmoqda...</b>",
+                parse_mode='HTML'
+            )
         else:
             # Edit text (search result)
-            await callback.message.edit_text(f"⏳ <b>Navbatga qo'shildi...</b>\nSizning navbatingiz: {position}", parse_mode='HTML')
+            await callback.message.edit_text("⏳ <b>Musiqangiz yuklanmoqda...</b>", parse_mode='HTML')
     except Exception as e:
         # Fallback
         logger.error(f"Error updating status: {e}")
     
-    # Prepare task object
-    task_obj = {
-        'callback': callback,
-        'status_msg': status_msg,
-        'is_media': is_media
-    }
-    
-    await DOWNLOAD_QUEUE.put(('music', callback.message.chat.id, video_id, task_obj))
+    process_music_task.delay(
+        chat_id=callback.message.chat.id,
+        video_id=video_id,
+        message_id=callback.message.message_id,
+        is_media=is_media,
+        status_message_id=status_msg.message_id if status_msg else None
+    )
 
 @router.callback_query(F.data == 'delete_this_msg')
 async def handle_delete_message_callback(callback: CallbackQuery):

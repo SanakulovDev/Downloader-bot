@@ -4,7 +4,6 @@ import redis.asyncio as redis
 from aiogram import Dispatcher
 
 from loader import bot, dp, REDIS_HOST, REDIS_PORT, redis_client
-from utils.queue_handler import start_workers
 from utils.set_bot_commands import set_default_commands
 from utils.db_api.database import engine
 from utils.db_api.models import Base
@@ -48,13 +47,9 @@ async def main():
         logger.warning(f"Redis not available: {e} (cache disabled)")
         loader.redis_client = None
 
-    # Start Workers
-    workers = await start_workers()
-    
     # Start Cleanup Worker
     from utils.cleanup import cleanup_worker
     cleanup_task = asyncio.create_task(cleanup_worker())
-    workers.append(cleanup_task)
     
     # Register Middleware
     from utils.middlewares.activity import ActivityMiddleware
@@ -77,10 +72,9 @@ async def main():
     try:
         await dp.start_polling(bot)
     finally:
-        # Cancel workers on exit
-        for w in workers:
-            w.cancel()
-        await asyncio.gather(*workers, return_exceptions=True)
+        # Cancel cleanup task on exit
+        cleanup_task.cancel()
+        await asyncio.gather(cleanup_task, return_exceptions=True)
     
     # Redis ni yopish
     if loader.redis_client:

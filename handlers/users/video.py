@@ -11,7 +11,7 @@ from loader import dp, TMP_DIR
 from states.bot_states import BotStates
 from keyboards.default_keyboards import main_menu
 from utils.validation import is_youtube_url, is_instagram_url, extract_url
-from utils.queue_handler import DOWNLOAD_QUEUE
+from tasks.bot_tasks import process_video_task
 from utils.search import search_music
 
 logger = logging.getLogger(__name__)
@@ -155,13 +155,12 @@ async def handle_video_logic(message: Message, url: str):
         disable_web_page_preview=True
     )
     
-    # Queue ga qo'shish
-    # position = DOWNLOAD_QUEUE.qsize() + 1
-    # await status_msg.edit_text(f"⏳ <b>Navbatga qo'shildi!</b>\nSizning o'rningiz: {position}", parse_mode='HTML')
-    
-    # Queue handler o'zi `utils/download.py` dagi funksiyani chaqiradi
-    # user_msg o'rniga None yuboramiz, chunki xabar o'chirilgan
-    await DOWNLOAD_QUEUE.put(('video', chat_id, url, {'user_msg': None, 'status_msg': status_msg, 'original_chat_id': chat_id}))
+    # Celery taskga yuboramiz (parallel bajariladi)
+    process_video_task.delay(
+        chat_id=chat_id,
+        url=url,
+        status_message_id=status_msg.message_id
+    )
 
 @router.callback_query(F.data == 'delete_this_msg')
 async def handle_delete_message_callback(callback: CallbackQuery):
