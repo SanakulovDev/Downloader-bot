@@ -13,6 +13,7 @@ from keyboards.default_keyboards import main_menu
 from utils.validation import is_youtube_url, is_instagram_url, extract_url
 from tasks.bot_tasks import process_video_task
 from utils.search import search_music
+from utils.download import COMMON_OPTS
 from utils.telegram_helpers import safe_delete_message, safe_edit_text
 from utils.i18n import get_user_lang, t
 
@@ -285,18 +286,10 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
 async def _fetch_video_info(url: str) -> dict | None:
     def _extract() -> dict | None:
         ydl_opts = {
-            'cookiefile': '/app/cookies.txt',
+            **COMMON_OPTS,
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'ios'],
-                }
-            },
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-            },
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False)
