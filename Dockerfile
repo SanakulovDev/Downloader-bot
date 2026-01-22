@@ -20,7 +20,9 @@ WORKDIR /app
 
 # Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Python dependencies qismiga quyidagicha o'zgartirish kiriting:
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
 
 
 # Bot kodini ko'chirish
