@@ -105,7 +105,7 @@ async def process_music_task(chat_id, video_id, msg_obj):
             # Like button
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="❤️ Sevimlilarga qo'shish", callback_data=f"like:{video_id}"),
+                    InlineKeyboardButton(text="❤️", callback_data=f"like:{video_id}"),
                     InlineKeyboardButton(text="❌", callback_data="delete_this_msg")
                 ]
             ])

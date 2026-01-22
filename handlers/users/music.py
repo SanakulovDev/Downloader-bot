@@ -102,13 +102,6 @@ async def cmd_my_favorite(message: Message):
                 callback_data=f"music:{song['id']}" # Reuse music download handler
             )
         ])
-        # Row 2: Delete Button (Below)
-        keyboard.append([
-            InlineKeyboardButton(
-                text="❌ O'chirish",
-                callback_data=f"del_fav:{song['id']}"
-            )
-        ])
     
     # Add "Clear All" button at the bottom
     keyboard.append([
