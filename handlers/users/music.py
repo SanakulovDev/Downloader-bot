@@ -300,7 +300,15 @@ async def handle_music_callback(callback: CallbackQuery):
         # Fallback
         logger.error(f"Error updating status: {e}")
     
-    process_music_task.delay(
+    # process_music_task.delay(
+    #     chat_id=callback.message.chat.id,
+    #     video_id=video_id,
+    #     message_id=callback.message.message_id,
+    #     is_media=is_media,
+    #     status_message_id=status_msg.message_id if status_msg else None
+    # )
+    from utils.queue_worker import submit_music_task
+    submit_music_task(
         chat_id=callback.message.chat.id,
         video_id=video_id,
         message_id=callback.message.message_id,

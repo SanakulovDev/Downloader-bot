@@ -13,26 +13,33 @@ logger = logging.getLogger(__name__)
 
 # --- FIX: LIST FORMAT FOR REMOTE COMPONENTS ---
 COMMON_OPTS = {
+    'quiet': True,
     'cookiefile': '/app/cookies.txt',
+    
+    # 2. IPv6
+    'force_ipv4': False, 
+    'force_ipv6': True,
 
-    'force_ipv4': True,
-
+    # 3. MIJOZ: WEB
     'extractor_args': {
         'youtube': {
-            'player_client': ['android'],
+            'player_client': ['web'],
         }
     },
+    
+    # 4. REMOTE COMPONENTS
+    'remote_components': ['ejs:github'],
 
-    'user_agent': 'Mozilla/5.0 (Linux; Android 11; Pixel 5)',
+    # 5. User Agent
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 
-    'quiet': True,
     'no_warnings': True,
-
-    'cachedir': False,
-    'noplaylist': True,
-
-    'retries': 2,
-    'socket_timeout': 10,
+    'ignoreerrors': True,
+    'nocheckcertificate': True,
+    'http_chunk_size': 10485760,
+    'retries': 5,
+    'fragment_retries': 5,
+    'socket_timeout': 15,
 }
 
 def _map_download_error(err_msg: str, media_type: str) -> Exception:
@@ -129,6 +136,9 @@ async def download_video(
     progress_hook: Optional[Callable[[dict], None]] = None
 ) -> Optional[str]:
     """Video yuklab olish"""
+    logger.info(f"DEBUG: download_video called for {url}")
+    logger.info(f"DEBUG: COMMON_OPTS ipv6={COMMON_OPTS.get('force_ipv6')}, client={COMMON_OPTS.get('extractor_args', {}).get('youtube', {}).get('player_client')}")
+    
     temp_file = None
     try:
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
@@ -178,10 +188,16 @@ async def download_video(
                 await asyncio.to_thread(ydl.download, [url])
         except yt_dlp.utils.DownloadError as e:
             err_msg = str(e).lower()
-            if "requested format is not available" in err_msg and format_selector:
-                fallback_opts = {**ydl_opts, 'format': 'bestvideo*+bestaudio/best/best'}
-                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                    await asyncio.to_thread(ydl.download, [url])
+            if "requested format is not available" in err_msg:
+                # 1-urinish: bestvideo+bestaudio fail bo'lsa -> best (bitta fayl, masalan format 18)
+                fallback_opts = {**ydl_opts, 'format': 'best'}
+                try:
+                    logger.info(f"Retrying with format 'best' for {url}")
+                    with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                        await asyncio.to_thread(ydl.download, [url])
+                except yt_dlp.utils.DownloadError as e2:
+                    # Agar yana o'xshamasa -> error qaytarish
+                    raise _map_download_error(str(e2).lower(), "video")
             else:
                 raise _map_download_error(err_msg, "video")
 

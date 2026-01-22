@@ -217,7 +217,13 @@ async def handle_video_logic(message: Message, url: str):
         parse_mode='HTML',
         disable_web_page_preview=True
     )
-    process_video_task.delay(
+    # process_video_task.delay(
+    #     chat_id=chat_id,
+    #     url=url,
+    #     status_message_id=status_msg.message_id
+    # )
+    from utils.queue_worker import submit_video_task
+    submit_video_task(
         chat_id=chat_id,
         url=url,
         status_message_id=status_msg.message_id
@@ -246,17 +252,28 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     has_m4a = "m4a" in audio_exts or "mp4" in audio_exts
     has_webm_audio = "webm" in audio_exts
     for fmt in formats:
+        # Debug logging
+        fid = fmt.get('format_id')
+        h = fmt.get('height')
+        vc = fmt.get('vcodec')
+        ac = fmt.get('acodec')
+        ext = fmt.get('ext')
+        logger.info(f"Checking format {fid}: h={h}, vc={vc}, ac={ac}, ext={ext}")
+
         # Faqat video streamlarni ko'rsatamiz
         if fmt.get("vcodec") == "none":
+            logger.info(f"Skipping {fid}: vcodec is none")
             continue
         height = fmt.get("height")
         if not height:
+            logger.info(f"Skipping {fid}: height missing")
             continue
 
         # Telegram uchun odatda MP4 yaxshi, lekin ba'zi videolarda faqat WEBM bo'lishi mumkin.
         # Shuning uchun mp4/webm ikkalasini ham qabul qilamiz.
         ext = fmt.get("ext")
         if ext not in {"mp4", "webm"}:
+            logger.info(f"Skipping {fid}: invalid ext {ext}")
             continue
 
         format_id = fmt.get("format_id")
@@ -270,15 +287,18 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         else:
             if ext == "mp4":
                 if not has_m4a:
+                    logger.info(f"Skipping {fid}: no compatible m4a audio")
                     continue
                 selector = f"{format_id}+{audio_sel_mp4}"
             else:
                 if not has_webm_audio:
+                    logger.info(f"Skipping {fid}: no compatible webm audio")
                     continue
                 selector = f"{format_id}+{audio_sel_webm}"
 
         size = _estimate_size_bytes(fmt, duration)
         if size and size > max_size:
+            logger.info(f"Skipping {fid}: size too big")
             continue
 
         # Bir xil height uchun bittasini ko'rsatamiz, mp4 mavjud bo'lsa mp4 ni afzal ko'ramiz.
@@ -296,8 +316,19 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         items.append((height, selector, size, ext))
 
     items.sort(key=lambda x: x[0])
+    logger.info(f"Formats found after filter: {len(items)}")
     if not items:
-        return "", None
+        # FALLBACK for restricted videos (like format 18)
+        # If no strict matches found, try to find any MP4 video
+        for fmt in formats:
+            if fmt.get('format_id') == '18':
+                 logger.info("Fallback: Adding format 18")
+                 items.append((360, "18", _estimate_size_bytes(fmt, duration), "mp4"))
+                 break
+        
+        if not items:
+             logger.info("No items found even after fallback.")
+             return "", None
 
     format_lines = []
     buttons = []
@@ -449,7 +480,15 @@ async def handle_video_format(callback: CallbackQuery):
         await safe_edit_text(callback.message, t("video_loading", lang), parse_mode='HTML')
 
     url = f"https://www.youtube.com/watch?v={video_id}"
-    process_video_task.delay(
+    # process_video_task.delay(
+    #     chat_id=callback.message.chat.id,
+    #     url=url,
+    #     status_message_id=callback.message.message_id,
+    #     format_selector=format_selector,
+    #     output_ext=output_ext
+    # )
+    from utils.queue_worker import submit_video_task
+    submit_video_task(
         chat_id=callback.message.chat.id,
         url=url,
         status_message_id=callback.message.message_id,
