@@ -334,6 +334,18 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
 
 
 async def _fetch_video_info(url: str) -> dict | None:
+    from loader import redis_client
+    url_key = None
+    if redis_client:
+        try:
+            import hashlib
+            url_key = f"yt_info:{hashlib.md5(url.encode()).hexdigest()}"
+            cached = await redis_client.get(url_key)
+            if cached:
+                import json
+                return json.loads(cached)
+        except Exception:
+            pass
     def _extract() -> dict | None:
         ydl_opts = {
             **COMMON_OPTS,
@@ -345,7 +357,14 @@ async def _fetch_video_info(url: str) -> dict | None:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False)
     try:
-        return await asyncio.to_thread(_extract)
+        info = await asyncio.to_thread(_extract)
+        if info and redis_client and url_key:
+            try:
+                import json
+                await redis_client.setex(url_key, 300, json.dumps(info))
+            except Exception:
+                pass
+        return info
     except Exception:
         return None
 

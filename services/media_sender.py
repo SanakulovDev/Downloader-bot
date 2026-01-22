@@ -39,12 +39,21 @@ async def send_video(
     url: str
 ) -> None:
     settings = get_settings()
-    await bot.send_video(
-        chat_id=chat_id,
-        video=FSInputFile(video_path),
-        caption="🤖 " + settings.telegram_nickname,
-        reply_markup=build_video_keyboard(url)
-    )
+    # Telegram video preview is best for mp4; for other formats send as document
+    if video_path.lower().endswith((".webm", ".mkv")):
+        await bot.send_document(
+            chat_id=chat_id,
+            document=FSInputFile(video_path),
+            caption="🤖 " + settings.telegram_nickname,
+            reply_markup=build_video_keyboard(url)
+        )
+    else:
+        await bot.send_video(
+            chat_id=chat_id,
+            video=FSInputFile(video_path),
+            caption="🤖 " + settings.telegram_nickname,
+            reply_markup=build_video_keyboard(url)
+        )
 
 
 async def send_audio(
