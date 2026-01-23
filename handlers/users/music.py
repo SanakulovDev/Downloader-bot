@@ -42,9 +42,9 @@ async def show_music_page(chat_id, results, page, lang: str, message_to_edit: Me
     # Pagination buttons
     nav_buttons = []
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"music_page:{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(text=t('music_prev_btn', lang), callback_data=f"music_page:{page-1}"))
     if end < len(results):
-        nav_buttons.append(InlineKeyboardButton(text="Keyingi ➡️", callback_data=f"music_page:{page+1}"))
+        nav_buttons.append(InlineKeyboardButton(text=t('music_next_btn', lang), callback_data=f"music_page:{page+1}"))
     
     if nav_buttons:
         keyboard.append(nav_buttons)
