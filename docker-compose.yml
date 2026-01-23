@@ -6,12 +6,10 @@ services:
     container_name: downloader_redis
     restart: always
     volumes:
-      # ESKI: - redis_data:/data
-      # YANGI: Redis ma'lumotlari 'redis_data_dir'ga tushadi
       - ./redis_data_dir:/data
-    command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    # Host network bilan ishlaganda portlar avtomatik localhostda bo'ladi
+    network_mode: "host" 
     
   postgres:
     image: postgres:15-alpine
@@ -20,11 +18,8 @@ services:
     env_file:
       - ./app/.env
     volumes:
-      # ESKI: - postgres_data:/var/lib/postgresql/data
-      # YANGI: Ma'lumotlar papkangiz ichidagi 'pg_data'ga tushadi
       - ./pg_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    network_mode: "host"
 
   admin_panel:
     build: .
@@ -36,73 +31,63 @@ services:
       - /dev/shm:/dev/shm
     env_file:
       - ./app/.env
-    ports:
-      - "23456:8000"
+    network_mode: "host"
     depends_on:
       - postgres
-    # --- YANGI QO'SHILGAN QISM ---
     environment:
-      # Biz Admin Panelga: "Baza manzili - postgres, Logini - postgres" deb qattiq tayinlaymiz.
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASS=postgres_pass
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres_pass
-      # SQLALCHEMY uchun aniq manzil (Eng ishonchli usul):
-      - DATABASE_URL=postgresql://postgres:postgres_pass@postgres:5432/downloader_db
-    # -----------------------------
+      - DATABASE_URL=postgresql://postgres:postgres_pass@127.0.0.1:5432/downloader_db
 
   downloader-bot:
     build: .
     container_name: ${CONTAINER_NAME}
     restart: always
-    
-    # --- ENG MUHIM QISM (IPV6 UCHUN) ---
     network_mode: "host"
-    # -----------------------------------
-
     depends_on:
       - redis
       - postgres
-    mem_limit: 2g
-    mem_reservation: 512m
+    # Resurslarni boshqarish (Swarm bo'lmasa ham Docker buni tushunadi)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
     volumes:
       - .:/app
+      # /dev/shm - RAM diskdan video yuklashda foydalanamiz
       - /dev/shm:/dev/shm
+      # Local API bilan fayllarni almashish uchun umumiy volume
+      - telegram_bot_api_data:/var/lib/telegram-bot-api
     env_file:
       - ./app/.env
     environment:
       - PYTHONUNBUFFERED=1
-      # Host rejimida bot konteyner nomlarini (redis, postgres) ko'rmaydi.
-      # Shuning uchun 127.0.0.1 (localhost) ishlatamiz.
       - REDIS_HOST=127.0.0.1 
       - REDIS_PORT=6379
-      # Agar .env ichida DB_HOST=postgres deb yozilgan bo'lsa, 
-      # uni ham kodingizda yoki shu yerda 127.0.0.1 ga o'zgartirish kerak bo'lishi mumkin.
       - DB_HOST=127.0.0.1
+      - TEMP_DIR=/dev/shm/tmp  # Vaqtinchalik fayllarni RAM-ga yo'naltiramiz
     ulimits:
       nofile:
         soft: 100000  
         hard: 100000
 
-  # celery-worker service removed (using local threading)
-
   telegram-bot-api:
     image: aiogram/telegram-bot-api:latest
     container_name: telegram_bot_api
     restart: always
+    # Local API'ga ko'proq yengillik berish uchun network_mode host qilamiz
+    network_mode: "host"
     environment:
       - TELEGRAM_API_ID=32927219
       - TELEGRAM_API_HASH=357ba58b52b8970387a61fa400c55544
       - TELEGRAM_LOCAL=true
+      - TELEGRAM_STAT=true # Monitoring uchun
     volumes:
       - telegram_bot_api_data:/var/lib/telegram-bot-api
-    ports:
-      - "8081:8081"
+    # Local API serverga ko'rsatilgan papkadan fayllarni o'qishga ruxsat beramiz
+    command: --local --dir /var/lib/telegram-bot-api
 
 volumes:
   redis_data:
   postgres_data:
+  # Bu volume bot va Local API o'rtasida fayllarni nusxasiz (link orqali) almashishga yordam beradi
   telegram_bot_api_data:
