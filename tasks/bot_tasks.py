@@ -79,19 +79,16 @@ async def _process_video_task_async(
         
         sent_message = None
         if existing_file_id:
-             sent_message = await send_video(bot, chat_id, video_path=None, url=url, file_id=existing_file_id)
+            sent_message = await send_video(bot, chat_id, video_path=None, url=url, file_id=existing_file_id)
         elif video_path:
             sent_message = await send_video(bot, chat_id, video_path=video_path, url=url)
-            
-            # Cache the file_id if sending was successful
+             
+             # Cache the file_id if sending was successful
             if sent_message and sent_message.video:
-                 url_hash = sha256(url.encode()).hexdigest()
-                 # We need to construct the data object similar to how utils/download.py likely expects/uses it, 
-                 # or simply pass what's needed. checked download.py, cache_media_result expects (url_hash, data_dict)
-                 # data_dict needs 'file_id' key.
-                 await cache_media_result(url_hash, {'file_id': sent_message.video.file_id})
+                url_hash = sha256(url.encode()).hexdigest()
+                await cache_media_result(url_hash, {'file_id': sent_message.video.file_id})
             
-            # Remove file from RAM/Disk
+            # Remove file from RAM/Disk (ALWAYS)
             try:
                 if os.path.exists(video_path):
                     os.remove(video_path)
@@ -183,6 +180,13 @@ async def _process_music_task_async(
                     await bot.delete_message(chat_id=chat_id, message_id=message_id)
                 except Exception:
                     pass
+
+            # Cleanup audio file
+            try:
+                if audio_path and os.path.exists(audio_path):
+                     os.remove(audio_path)
+            except Exception as e:
+                logger.error(f"Failed to remove audio file: {e}")
 
             if status_message_id:
                 try:

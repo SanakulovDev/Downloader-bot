@@ -42,6 +42,11 @@ COMMON_OPTS = {
     'nocheckcertificate': True,
     'youtube_include_dash_manifest': True,
     'youtube_include_hls_manifest': True,
+    
+    # Aria2c Configuration
+    'external_downloader': 'aria2c',
+    'external_downloader_args': ['-x16', '-k1M', '-s16'],   
+    
     'http_chunk_size': 10485760,
     'retries': 5,
     'fragment_retries': 5,
