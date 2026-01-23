@@ -8,7 +8,7 @@ from loader import dp
 from states.bot_states import BotStates
 from utils.search import search_music
 from tasks.bot_tasks import process_music_task
-from utils.telegram_helpers import safe_delete_message, safe_edit_text
+from utils.telegram_helpers import safe_delete_message, safe_edit_text, check_text_length_and_notify
 from utils.i18n import get_user_lang, t
 
 router = Router()
@@ -235,7 +235,13 @@ async def handle_music_logic(message: Message, state: FSMContext):
     await safe_delete_message(message)
 
     from loader import redis_client
+    from loader import bot
     lang = await get_user_lang(message.from_user.id, redis_client)
+    
+    # Validation: 4-200 characters
+    if not await check_text_length_and_notify(text, bot, message.chat.id, lang):
+        return
+
     status_msg = await message.answer(t("music_loading", lang), parse_mode='HTML')
     
     # 20 ta natija olish (pagination uchun)

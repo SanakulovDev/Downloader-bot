@@ -15,7 +15,7 @@ from utils.validation import is_youtube_url, is_instagram_url, extract_url, extr
 from tasks.bot_tasks import process_video_task
 from utils.search import search_music
 from utils.download import COMMON_OPTS
-from utils.telegram_helpers import safe_delete_message, safe_edit_text
+from utils.telegram_helpers import safe_delete_message, safe_edit_text, check_text_length_and_notify
 from utils.i18n import get_user_lang, t
 
 logger = logging.getLogger(__name__)
@@ -157,6 +157,16 @@ async def handle_video_logic(message: Message, url: str):
     from loader import redis_client
     lang = await get_user_lang(message.from_user.id, redis_client)
 
+    # 1. Xabarni darhol o'chirish
+    deleted = await safe_delete_message(message)
+    if not deleted:
+        logger.warning("Xabarni o'chirib bo'lmadi.")
+
+    # 2. Uzunlikni tekshirish (4-200)
+    text = message.text or ""
+    if not await check_text_length_and_notify(text, bot, chat_id, lang):
+        return
+
     if is_youtube_url(url):
         initial_msg = await _send_fast_preview(bot, chat_id, url, lang)
         info = await _fetch_video_info(url)
@@ -205,10 +215,7 @@ async def handle_video_logic(message: Message, url: str):
                 )
         return
 
-    # Mijozning link xabarini o'chirish (preview ko'rsatilmasligi uchun)
-    deleted = await safe_delete_message(message)
-    if not deleted:
-        logger.warning("Xabarni o'chirib bo'lmadi.")
+    # Instagram va boshqa holatlar uchun eski oqim
 
     # Instagram va boshqa holatlar uchun eski oqim
     status_msg = await bot.send_message(
