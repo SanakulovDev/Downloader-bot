@@ -49,8 +49,14 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 4G
+          # Serveringizda jami 2 yadro bor, shuning uchun 4 emas, 2 ga to'g'irlaymiz
+          cpus: '2.0'
+          # Serveringiz RAM-i 2GB, shuning uchun Docker-ga 1.5GB dan ortiq bermaslik kerak
+          # Qolgan 512MB tizim va boshqa konteynerlar (Redis, DB) uchun qolishi shart
+          memory: 1.5G 
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     volumes:
       - .:/app
       # /dev/shm - RAM diskdan video yuklashda foydalanamiz

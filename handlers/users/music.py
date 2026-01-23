@@ -57,7 +57,6 @@ async def show_music_page(chat_id, results, page, lang: str, message_to_edit: Me
     kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
     
     text = (
-        f"{t('search_tip', lang)}\n\n"
         f"{t('search_results', lang, page=page+1)}"
     )
     
@@ -242,7 +241,7 @@ async def handle_music_logic(message: Message, state: FSMContext):
     if not await check_text_length_and_notify(text, bot, message.chat.id, lang):
         return
 
-    status_msg = await message.answer(t("music_loading", lang), parse_mode='HTML')
+    status_msg = await message.answer(t("searching", lang), parse_mode='HTML')
     
     # 20 ta natija olish (pagination uchun)
     results = await search_music(text) 
