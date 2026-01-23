@@ -3,10 +3,10 @@ import queue
 import asyncio
 import logging
 import time
-from hashlib import sha256
+import hashlib
 from typing import Optional, Dict, Any
 
-from utils.download import download_video, download_audio
+from utils.download import download_video, download_audio, cache_media_result
 from services.artist_cache import cache_artist_name
 from services.bot_client import create_bot_session
 from services.idempotency import acquire_lock, release_lock
@@ -91,10 +91,9 @@ async def _process_task(task: Dict[str, Any]):
 
 async def _process_video_task_async(chat_id: int, url: str, status_message_id: Optional[int], format_selector: Optional[str], output_ext: Optional[str]):
     # Idempotency check
-    url_hash = sha256(url.encode()).hexdigest()[:16]
-    lock_key = f"idempotency:video:{chat_id}:{url_hash}"
-    # Note: acquire_lock uses Redis. If Redis is down/removed, we might want to skip or handle gracefully.
-    # Assuming Redis container is still kept as per plan.
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    lock_key = f"idempotency:video:{chat_id}:{url_hash[:16]}"
+    
     if not acquire_lock(lock_key):
         if status_message_id:
             await _delete_message_only(chat_id, status_message_id)
@@ -121,25 +120,52 @@ async def _process_video_task_async(chat_id: int, url: str, status_message_id: O
                     percent = f"{downloaded * 100 / total:.0f}%"
                 text = t("video_progress", lang, percent=percent)
                 
-                # We need to run this on the main thread loop or ensure thread safety.
-                # Since we are in asyncio.run(), we have OUR loop.
-                # NOTE: create_bot_session creates a bot instance.
-                # Calling bot methods is async, can be awaited directly in this loop.
                 asyncio.run_coroutine_threadsafe(
                     _edit_progress_message(bot, chat_id, status_message_id, text),
                     loop
                 )
                 last_update = now
 
-            video_path = await download_video(
+            video_path, file_id = await download_video(
                 url,
                 chat_id,
                 format_selector=format_selector,
                 output_ext=output_ext,
                 progress_hook=progress_hook
             )
-            if video_path:
-                await send_video(bot, chat_id, video_path, url)
+            
+            sent_message = None
+            if file_id:
+                 # Agar file_id bo'lsa, to'g'ridan-to'g'ri yuboramiz (path shart emas)
+                 # Lekin send_video hozir path kutadi. Uni video_path sifatida uzatamiz (agar None bo'lsa, moslash kerak)
+                 # Hozircha send_video ni o'zgartirmadik, lekin u path yoki file_id qabul qiladigan qilsa bo'ladi.
+                 # Yoki oddiygina: video_path o'rniga file_id berib yuborsak, aiogram FSInputFile deb o'ylab qolishi mumkin.
+                 # Shuning uchun send_video ga file_id uzatishda ehtiyot bo'lish kerak.
+                 # Keling send_video ni chaqirganda video_path o'rniga file_id beramiz, chunki aiogram send_video methodi
+                 # str qabul qilsa (va u fayl bo'lmasa) file_id deb tushunadi (agar to'g'ri format bo'lsa).
+                 sent_message = await send_video(bot, chat_id, file_id, url)
+            elif video_path:
+                sent_message = await send_video(bot, chat_id, video_path, url)
+
+            if sent_message:
+                # Cache success logic using file_id
+                # sent_message bu Message object. Undan video.file_id ni olamiz
+                new_file_id = None
+                if sent_message.video:
+                    new_file_id = sent_message.video.file_id
+                elif sent_message.document:
+                    new_file_id = sent_message.document.file_id
+                
+                if new_file_id:
+                    # Save to Redis Cache (Grouped Hash Map)
+                    # Data: path (if local), file_id, ts
+                    cache_data = {
+                        'path': video_path if video_path else "", # path bo'lmasligi mumkin agar file_id ishlatilgan bo'lsa
+                        'file_id': new_file_id,
+                        'ts': int(time.time()),
+                        'type': 'video'
+                    }
+                    await cache_media_result(url_hash, cache_data)
 
                 if status_message_id:
                     try:
@@ -184,14 +210,37 @@ async def _process_music_task_async(chat_id: int, video_id: str, message_id: int
         bot, session = create_bot_session()
         lang = get_user_lang_sync(chat_id)
         try:
-            audio_path, filename = await download_audio(video_id, chat_id)
-            if audio_path:
+            audio_path, filename, file_id = await download_audio(video_id, chat_id)
+            
+            sent_message = None
+            if file_id:
+                 # Reuse cached file_id
+                 sent_message = await send_audio(bot, chat_id, file_id, filename, video_id)
+            elif audio_path:
                 artist_name = "Unknown"
                 if " - " in filename:
                     artist_name = filename.rsplit(" - ", 1)[1].replace(".m4a", "")
                 cache_artist_name(video_id, artist_name)
 
-                await send_audio(bot, chat_id, audio_path, filename, video_id)
+                sent_message = await send_audio(bot, chat_id, audio_path, filename, video_id)
+
+            if sent_message:
+                # Capture file_id and Cache
+                new_file_id = None
+                if sent_message.audio:
+                    new_file_id = sent_message.audio.file_id
+                
+                if new_file_id:
+                    url = f"https://www.youtube.com/watch?v={video_id}"
+                    url_hash = hashlib.md5(url.encode()).hexdigest()
+                    cache_data = {
+                        'path': audio_path if audio_path else "",
+                        'file_id': new_file_id,
+                        'filename': filename,
+                        'ts': int(time.time()),
+                        'type': 'audio'
+                    }
+                    await cache_media_result(url_hash, cache_data)
 
                 if not is_media:
                     try:
