@@ -57,7 +57,6 @@ async def show_music_page(chat_id, results, page, lang: str, message_to_edit: Me
     kb = InlineKeyboardMarkup(inline_keyboard=keyboard)
     
     text = (
-        f"{t('search_tip', lang)}\n\n"
         f"{t('search_results', lang, page=page+1)}"
     )
     

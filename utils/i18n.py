@@ -86,7 +86,7 @@ _TEXTS: dict[str, dict[str, str]] = {
         "uz": "🎵 Natijalar (Sahifa {page}):",
         "ru": "🎵 Результаты (страница {page}):",
     },
-    "search_tip": {
+    "F": {
         "uz": "Musiqa qidirmoqchimisiz menga yozing va men bir zumda topib beraman.",
         "ru": "Хотите найти музыку? Напишите мне, и я быстро найду.",
     },
