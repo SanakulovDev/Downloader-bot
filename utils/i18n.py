@@ -248,6 +248,14 @@ _TEXTS: dict[str, dict[str, str]] = {
         "uz": "❌ Tizimda xatolik yuz berdi.",
         "ru": "❌ Произошла системная ошибка.",
     },
+    "music_next_btn": {
+        "uz": "Keyingi ➡️",
+        "ru": "Следующий ➡️",
+    },
+    "music_prev_btn": {
+        "uz": "Oldingi ⬅️",
+        "ru": "Предыдущий ⬅️",
+    }
 }
 
 _ERROR_MAP: dict[str, dict[str, str]] = {
