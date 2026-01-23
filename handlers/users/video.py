@@ -270,6 +270,11 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         if fmt.get("ext") == "mhtml":
             continue
 
+        # Hajmni tekshirish (o'lchami kattalarni oldindan chiqarib tashlaymiz)
+        size = _estimate_size_bytes(fmt, duration)
+        if size and size > max_size:
+            continue
+
         # Har bir sifat uchun eng yaxshisini tanlaymiz
         current_best = best_formats.get(height)
         if not current_best:
@@ -306,9 +311,6 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
             is_merge = "0"
 
         size = _estimate_size_bytes(fmt, duration)
-        if size and size > max_size:
-            continue
-            
         ext = fmt.get("ext", "mp4")
         # Selector o'rniga format_id va is_merge ni saqlaymiz
         items.append((height, format_id, is_merge, size, ext))

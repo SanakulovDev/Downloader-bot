@@ -1,18 +1,18 @@
 import yt_dlp
 import json
+print(f"yt-dlp version: {yt_dlp.version.__version__}")
 
 COMMON_OPTS = {
+    'cachedir': False,
     'quiet': True,
-    'cookiefile': '/app/cookies.txt', 
+    # 'cookiefile': '/app/cookies.txt', 
     'force_ipv4': True, 
     'force_ipv6': False,
-    'extractor_args': {
-        'youtube': {
-            # 'tv' va 'tvembed' klientlari eng ko'p formatni beradi
-            'player_client': ['tv', 'web', 'android'],
-            'player_skip': ['webpage', 'configs'],
-        }
-    },
+    # 'extractor_args': {
+    #     'youtube': {
+    #         'player_client': ['android', 'ios'],
+    #     }
+    # },
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     'no_warnings': True,
     'ignoreerrors': False, # Xatoni ko'rish uchun vaqtincha False qiling
@@ -31,8 +31,8 @@ if not os.path.exists('/app/cookies.txt'):
     else:
         print("Warning: cookies.txt not found")
         # del COMMON_OPTS['cookiefile'] # Don't delete, let it error if critical or just print warning
-
-url = "https://www.youtube.com/watch?v=LXb3EKWsInQ" # 4K video
+# https://youtu.be/E0-Q5l60aQM?si=SODzuRCgB-akkoqY
+url = "https://www.youtube.com/watch?v=E0-Q5l60aQM" # 4K video
 
 print(f"Checking formats for {url}...")
 with yt_dlp.YoutubeDL(COMMON_OPTS) as ydl:
@@ -44,6 +44,19 @@ with yt_dlp.YoutubeDL(COMMON_OPTS) as ydl:
     formats = info.get('formats', [])
     print(f"Found {len(formats)} formats.")
     
+    print(f"{'ID':<10} {'EXT':<5} {'RES':<10} {'NOTE'}")
+    print("-" * 40)
+    for f in formats:
+        fid = f.get('format_id')
+        ext = f.get('ext')
+        res = f"{f.get('width')}x{f.get('height')}" if f.get('height') else "audio only"
+        note = f.get('format_note', '')
+        vcodec = f.get('vcodec')
+        acodec = f.get('acodec')
+        
+        # Soddalashtirilgan ko'rinish
+        print(f"{fid:<10} {ext:<5} {res:<10} {note} | v:{vcodec} a:{acodec}")
+
     # 1080p formatini qidirish
     target_format = None
     for f in formats:
@@ -52,17 +65,7 @@ with yt_dlp.YoutubeDL(COMMON_OPTS) as ydl:
             break
             
     if target_format:
-        print(f"Downloading 1080p video (ID: {target_format['format_id']})...")
-        # Video + Audio birlashtirish
-        ydl_opts = {
-            **COMMON_OPTS,
-            'format': f"{target_format['format_id']}+bestaudio/best",
-            'outtmpl': 'test_1080p.%(ext)s',
-            'merge_output_format': 'mp4',
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl_down:
-            ydl_down.download([url])
-            print("Download complete: test_1080p.mp4")
+        print(f"\nFound 1080p video (ID: {target_format['format_id']}).")
     else:
-        print("1080p format not found.")
+        print("\n1080p format not found.")
 

@@ -1,11 +1,12 @@
 import asyncio
 import logging
+import os
 import time
 from hashlib import sha256
 from typing import Optional
 
 from tasks.celery_app import celery_app
-from utils.download import download_video, download_audio
+from utils.download import download_video, download_audio, cache_media_result
 from services.artist_cache import cache_artist_name
 from services.bot_client import create_bot_session
 from services.idempotency import acquire_lock, release_lock
@@ -68,16 +69,36 @@ async def _process_video_task_async(
             )
             last_update = now
 
-        video_path = await download_video(
+        video_path, existing_file_id = await download_video(
             url,
             chat_id,
             format_selector=format_selector,
             output_ext=output_ext,
             progress_hook=progress_hook
         )
-        if video_path:
-            await send_video(bot, chat_id, video_path, url)
+        
+        sent_message = None
+        if existing_file_id:
+             sent_message = await send_video(bot, chat_id, video_path=None, url=url, file_id=existing_file_id)
+        elif video_path:
+            sent_message = await send_video(bot, chat_id, video_path=video_path, url=url)
+            
+            # Cache the file_id if sending was successful
+            if sent_message and sent_message.video:
+                 url_hash = sha256(url.encode()).hexdigest()
+                 # We need to construct the data object similar to how utils/download.py likely expects/uses it, 
+                 # or simply pass what's needed. checked download.py, cache_media_result expects (url_hash, data_dict)
+                 # data_dict needs 'file_id' key.
+                 await cache_media_result(url_hash, {'file_id': sent_message.video.file_id})
+            
+            # Remove file from RAM/Disk
+            try:
+                if os.path.exists(video_path):
+                    os.remove(video_path)
+            except Exception as e:
+                logger.error(f"Failed to remove video file: {e}")
 
+        if sent_message:
             if status_message_id:
                 try:
                     await bot.delete_message(chat_id=chat_id, message_id=status_message_id)

@@ -35,25 +35,36 @@ def build_audio_keyboard(video_id: str) -> InlineKeyboardMarkup:
 async def send_video(
     bot: Bot,
     chat_id: int,
-    video_path: str,
-    url: str
+    video_path: str = None,
+    url: str = None,
+    file_id: str = None  # Add file_id
 ):
     settings = get_settings()
+    
+    if file_id:
+        return await bot.send_video(
+            chat_id=chat_id,
+            video=file_id,
+            caption="🤖 " + settings.telegram_nickname,
+            reply_markup=build_video_keyboard(url)
+        )
+
     # Telegram video preview is best for mp4; for other formats send as document
-    if video_path.lower().endswith((".webm", ".mkv")):
+    if video_path and video_path.lower().endswith((".webm", ".mkv")):
         return await bot.send_document(
             chat_id=chat_id,
             document=FSInputFile(video_path),
             caption="🤖 " + settings.telegram_nickname,
             reply_markup=build_video_keyboard(url)
         )
-    else:
+    elif video_path:
         return await bot.send_video(
             chat_id=chat_id,
             video=FSInputFile(video_path),
             caption="🤖 " + settings.telegram_nickname,
             reply_markup=build_video_keyboard(url)
         )
+
 
 
 async def send_audio(

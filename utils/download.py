@@ -25,12 +25,11 @@ COMMON_OPTS = {
     'force_ipv6': False,
 
     # 3. MIJOZ: TV, WEB, ANDROID (Eng ko'p format uchun)
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['tv', 'web', 'android'],
-            'player_skip': ['webpage', 'configs'],
-        }
-    },
+    # 'extractor_args': {
+    #     'youtube': {
+    #         'player_client': ['android', 'ios', 'web'],
+    #     }
+    # },
     
     # 4. REMOTE COMPONENTS
     'remote_components': ['ejs:github'],

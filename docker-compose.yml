@@ -7,10 +7,15 @@ services:
     restart: always
     volumes:
       - ./redis_data_dir:/data
-    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
-    # Host network bilan ishlaganda portlar avtomatik localhostda bo'ladi
+    # RAM kamligi uchun maxmemoryni 300MB ga tushiramiz. 
+    # Hash Map va TTL ishlatganingiz uchun bu millionlab userga ham yetadi.
+    command: redis-server --appendonly yes --maxmemory 300mb --maxmemory-policy allkeys-lru
     network_mode: "host" 
-    
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+
   postgres:
     image: postgres:15-alpine
     container_name: downloader_db
@@ -20,22 +25,30 @@ services:
     volumes:
       - ./pg_data:/var/lib/postgresql/data
     network_mode: "host"
+    deploy:
+      resources:
+        limits:
+          memory: 400M
 
-  admin_panel:
-    build: .
-    container_name: downloader_admin
-    restart: always
-    command: uvicorn admin_panel:app --host 0.0.0.0 --port 8000
-    volumes:
-      - .:/app
-      - /dev/shm:/dev/shm
-    env_file:
-      - ./app/.env
-    network_mode: "host"
-    depends_on:
-      - postgres
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres_pass@127.0.0.1:5432/downloader_db
+  # admin_panel:
+  #   build: .
+  #   container_name: downloader_admin
+  #   restart: always
+  #   command: uvicorn admin_panel:app --host 0.0.0.0 --port 8000
+  #   volumes:
+  #     - .:/app
+  #     - /dev/shm:/dev/shm
+  #   env_file:
+  #     - ./app/.env
+  #   network_mode: "host"
+  #   depends_on:
+  #     - postgres
+  #   environment:
+  #     - DATABASE_URL=postgresql://postgres:postgres_pass@127.0.0.1:5432/downloader_db
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 300M
 
   downloader-bot:
     build: .
@@ -45,23 +58,19 @@ services:
     depends_on:
       - redis
       - postgres
-    # Resurslarni boshqarish (Swarm bo'lmasa ham Docker buni tushunadi)
     deploy:
       resources:
         limits:
-          # Serveringizda jami 2 yadro bor, shuning uchun 4 emas, 2 ga to'g'irlaymiz
-          cpus: '2.0'
-          # Serveringiz RAM-i 2GB, shuning uchun Docker-ga 1.5GB dan ortiq bermaslik kerak
-          # Qolgan 512MB tizim va boshqa konteynerlar (Redis, DB) uchun qolishi shart
-          memory: 1.5G 
+          # CPU ni 1.5 qilib qo'yamiz, tizimga 0.5 yadro kalsin
+          cpus: '1.5'
+          # RAM ni 800MB ga tushiramiz, qolganini Swap hal qiladi
+          memory: 800M 
         reservations:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '0.3'
+          memory: 256M
     volumes:
       - .:/app
-      # /dev/shm - RAM diskdan video yuklashda foydalanamiz
       - /dev/shm:/dev/shm
-      # Local API bilan fayllarni almashish uchun umumiy volume
       - telegram_bot_api_data:/var/lib/telegram-bot-api
     env_file:
       - ./app/.env
@@ -70,30 +79,34 @@ services:
       - REDIS_HOST=127.0.0.1 
       - REDIS_PORT=6379
       - DB_HOST=127.0.0.1
-      - TEMP_DIR=/dev/shmsh # Vaqtinchalik fayllarni RAM-ga yo'naltiramiz
+      # TEMP_DIR ni to'g'riladik (shmsh dagi 'sh' olib tashlandi)
+      - TEMP_DIR=/dev/shm 
     ulimits:
       nofile:
-        soft: 100000  
-        hard: 100000
+        soft: 65535  
+        hard: 65535
 
   telegram-bot-api:
     image: aiogram/telegram-bot-api:latest
     container_name: telegram_bot_api
     restart: always
-    # Local API'ga ko'proq yengillik berish uchun network_mode host qilamiz
     network_mode: "host"
     environment:
       - TELEGRAM_API_ID=32927219
       - TELEGRAM_API_HASH=357ba58b52b8970387a61fa400c55544
       - TELEGRAM_LOCAL=true
-      - TELEGRAM_STAT=true # Monitoring uchun
+      - TELEGRAM_STAT=true
     volumes:
       - telegram_bot_api_data:/var/lib/telegram-bot-api
-    # Local API serverga ko'rsatilgan papkadan fayllarni o'qishga ruxsat beramiz
-    command: --local --dir /var/lib/telegram-bot-api
+      - /dev/shm:/dev/shm
+    # Beget-da 2 yadro bo'lgani uchun ishchi oqimlar sonini 4 taga cheklaymiz
+    command: --local --dir /var/lib/telegram-bot-api --temp-dir /dev/shm --max-webhook-connections 50 --working-threads 4
+    deploy:
+      resources:
+        limits:
+          memory: 600M
 
 volumes:
   redis_data:
   postgres_data:
-  # Bu volume bot va Local API o'rtasida fayllarni nusxasiz (link orqali) almashishga yordam beradi
   telegram_bot_api_data:
