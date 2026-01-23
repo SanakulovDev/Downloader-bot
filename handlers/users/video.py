@@ -243,10 +243,10 @@ def _estimate_size_bytes(fmt: dict, duration: int | None) -> int | None:
 def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMarkup | None]:
     formats = info.get("formats") or []
     duration = info.get("duration")
-    max_size = 2 * 1024 * 1024 * 1024 # 2GB (Local Bot API uchun)
+    max_size = 900 * 1024 * 1024 # 900MB (Foydalanuvchi talabi)
     
     # Bizga kerakli sifatlar ro'yxati
-    target_heights = {144, 240, 360, 480, 720, 1080}
+    target_heights = {144, 240, 360, 480, 720, 1080, 1440, 2160}
     best_formats = {} # {height: format_dict}
 
     for fmt in formats:
@@ -292,18 +292,19 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         # yt-dlp avtomatik FFmpeg orqali birlashtirib beradi
         acodec = fmt.get("acodec")
         if not acodec or acodec == "none":
-            # DASH video + eng yaxshi audio
-            selector = f"{format_id}+bestaudio[ext=m4a]/bestaudio/best"
+            # DASH video (merge required) -> '1'
+            is_merge = "1"
         else:
-            # Progressive format (audio+video birgalikda)
-            selector = format_id
+            # Progressive (direct) -> '0'
+            is_merge = "0"
 
         size = _estimate_size_bytes(fmt, duration)
         if size and size > max_size:
             continue
             
         ext = fmt.get("ext", "mp4")
-        items.append((height, selector, size, ext))
+        # Selector o'rniga format_id va is_merge ni saqlaymiz
+        items.append((height, format_id, is_merge, size, ext))
 
     # Agar hech narsa topilmasa, fallback sifatida format 18 ni ishlatamiz
     if not items:
@@ -311,7 +312,8 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         for fmt in formats:
             if fmt.get('format_id') == '18':
                 logger.info("Using fallback format 18 (360p progressive)")
-                items.append((360, "18", _estimate_size_bytes(fmt, duration), "mp4"))
+                # Fallback: 18 format (progressive -> is_merge='0')
+                items.append((360, "18", "0", _estimate_size_bytes(fmt, duration), "mp4"))
                 break
     
     if not items:
@@ -322,17 +324,20 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     buttons = []
     row = []
     
-    for height, selector, size, ext in items:
+    for height, format_id, is_merge, size, ext in items:
         size_mb = "?"
         if size:
             size_mb = t("size_mb", lang, mb=round(size / (1024 * 1024)))
         
         format_lines.append(t("format_line", lang, height=height, size=size_mb))
+
+        # Pattern: vf:{video_id}:{fmt_id}:{is_merge}:{ext}
+        vid = info.get('id')
         
         row.append(
             InlineKeyboardButton(
-                text=f"{height}p", # ext ni qisqartirdik joy tejash uchun
-                callback_data=f"video_format:{info.get('id')}:{selector}:{ext}"
+                text=f"{height}p", 
+                callback_data=f"vf:{vid}:{format_id}:{is_merge}:{ext}"
             )
         )
         if len(row) == 3: # 3 tadan tugma bir qatorda
@@ -446,14 +451,23 @@ async def _edit_preview_with_formats(bot, message: Message, caption: str, keyboa
         await safe_edit_text(message, caption, reply_markup=keyboard, parse_mode='HTML')
 
 
-@router.callback_query(F.data.startswith('video_format:'))
+@router.callback_query(F.data.startswith('vf:'))
 async def handle_video_format(callback: CallbackQuery):
-    data = callback.data.split(':', 3)
-    if len(data) < 4:
+    # vf:{vid}:{fid}:{m}:{ext}
+    data = callback.data.split(':')
+    if len(data) < 5:
         return
+        
     video_id = data[1]
-    format_selector = data[2]
-    output_ext = data[3]
+    format_id = data[2]
+    is_merge = data[3]
+    output_ext = data[4]
+    
+    if is_merge == "1":
+        # Reconstruct standard merge selector
+        format_selector = f"{format_id}+bestaudio[ext=m4a]/bestaudio/best"
+    else:
+        format_selector = format_id
     from loader import redis_client
     lang = await get_user_lang(callback.from_user.id, redis_client)
 

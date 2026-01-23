@@ -17,13 +17,14 @@ COMMON_OPTS = {
     'cookiefile': '/app/cookies.txt',
     
     # 2. IPv6
-    'force_ipv4': False, 
-    'force_ipv6': True,
+    'force_ipv4': True, 
+    'force_ipv6': False,
 
-    # 3. MIJOZ: WEB
+    # 3. MIJOZ: TV, WEB, ANDROID (Eng ko'p format uchun)
     'extractor_args': {
         'youtube': {
-            'player_client': ['web'],
+            'player_client': ['tv', 'web', 'android'],
+            'player_skip': ['webpage', 'configs'],
         }
     },
     
@@ -31,11 +32,13 @@ COMMON_OPTS = {
     'remote_components': ['ejs:github'],
 
     # 5. User Agent
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
 
     'no_warnings': True,
     'ignoreerrors': True,
     'nocheckcertificate': True,
+    'youtube_include_dash_manifest': True,
+    'youtube_include_hls_manifest': True,
     'http_chunk_size': 10485760,
     'retries': 5,
     'fragment_retries': 5,
