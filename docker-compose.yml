@@ -64,7 +64,7 @@ services:
       - REDIS_HOST=127.0.0.1 
       - REDIS_PORT=6379
       - DB_HOST=127.0.0.1
-      - TEMP_DIR=/dev/shm/tmp  # Vaqtinchalik fayllarni RAM-ga yo'naltiramiz
+      - TEMP_DIR=/dev/shmsh # Vaqtinchalik fayllarni RAM-ga yo'naltiramiz
     ulimits:
       nofile:
         soft: 100000  

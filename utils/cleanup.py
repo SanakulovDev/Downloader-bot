@@ -12,11 +12,11 @@ async def cleanup_worker():
     
     while True:
         try:
-            # Har 1 soatda tekshiradi
-            await asyncio.sleep(3600)
+            # Har 5 daqiqada tekshiradi
+            await asyncio.sleep(300)
             
             now = time.time()
-            limit = 86400 # 24 soat (sekundlarda)
+            limit = 1800 # 30 daqiqa (sekundlarda)
             
             count = 0
             # TMP_DIR ichidagi fayllarni tekshirish

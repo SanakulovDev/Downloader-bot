@@ -2,16 +2,20 @@ import asyncio
 import os
 import hashlib
 import logging
+import time
 from pathlib import Path
-from typing import Tuple, Optional, Callable
+from typing import Tuple, Optional, Callable, Dict, Any
 import yt_dlp
+import msgpack
 from instagram_downloader import download_instagram_direct
 from loader import TMP_DIR, redis_client
 from utils.validation import is_instagram_url, is_youtube_url
 
 logger = logging.getLogger(__name__)
 
-# --- FIX: LIST FORMAT FOR REMOTE COMPONENTS ---
+# --- CONFIG ---
+CACHE_TTL = 1800  # 30 minutes
+
 COMMON_OPTS = {
     'quiet': True,
     'cookiefile': '/app/cookies.txt',
@@ -73,26 +77,71 @@ def _find_downloaded_file(search_dir: Path, prefix: str) -> Optional[Path]:
             return file
     return None
 
+# --- CACHE UTILS ---
 
-async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Optional[str]]:
-    """Music yuklab olish - MP3"""
+async def get_cached_media(url_hash: str) -> Optional[Dict[str, Any]]:
+    """
+    Redis'dan keshni o'qish. 
+    Key format: media_cache:{bucket_id} -> field: {full_hash}
+    Value: MessagePack compressed bytes
+    """
+    if not redis_client:
+        return None
+        
+    bucket = f"media_cache:{url_hash[:4]}"
+    try:
+        data = await redis_client.hget(bucket, url_hash)
+        if data:
+            return msgpack.unpackb(data)
+    except Exception as e:
+        logger.error(f"Cache get error: {e}")
+    return None
+
+async def cache_media_result(url_hash: str, data: Dict[str, Any]):
+    """
+    Natijani Redis'ga siqilgan holda yozish va TTL ni yangilash.
+    """
+    if not redis_client:
+        return
+        
+    bucket = f"media_cache:{url_hash[:4]}"
+    packed = msgpack.packb(data)
+    try:
+        await redis_client.hset(bucket, url_hash, packed)
+        # Butun bucket uchun TTL yangilanadi (oddiy va samarali)
+        await redis_client.expire(bucket, CACHE_TTL)
+    except Exception as e:
+        logger.error(f"Cache set error: {e}")
+
+
+async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Music yuklab olish - MP3/M4A
+    Returns: (file_path, filename, file_id)
+    """
     url = f"https://www.youtube.com/watch?v={video_id}"
-    # Oldingi .mp3 tekshiruvini olib tashlaymiz
-    # final_path = Path(TMP_DIR) / f"{video_id}.mp3" 
+    url_hash = hashlib.md5(url.encode()).hexdigest()
     
-    # 1. Keshni (hozircha mp3 ga) tekshirish (agar oldin yuklangan bo'lsa)
-    # Agar biz dinamik formatga o'tsak, keshlash mantig'ini ham o'zgartirish kerak.
-    # Hozircha oddiy qoldiramiz: Har doim yangisini yuklayversin yoki faylni qidirsin.
+    # 1. Keshni tekshirish
+    cached = await get_cached_media(url_hash)
+    if cached:
+        cached_path = cached.get('path')
+        cached_file_id = cached.get('file_id')
+        
+        # Agar file_id bo'lsa, fayl shart emas (Telegramdan qayta yuboramiz)
+        if cached_file_id:
+            logger.info(f"Using cached file_id for audio: {video_id}")
+            return None, cached.get('filename', 'audio.m4a'), cached_file_id
+            
+        # Agar fayl diskda bo'lsa
+        if cached_path and os.path.exists(cached_path):
+            logger.info(f"Using cached file for audio: {video_id}")
+            return cached_path, cached.get('filename', 'audio.m4a'), None
 
     ydl_opts = {
         **COMMON_OPTS,
-        # 'bestaudio[ext=m4a]' -> M4A ni majburlash (Telegram uchun eng yaxshisi)
-        # Agar bo'lmasa oddiy bestaudio
         'format': 'bestaudio[ext=m4a]/bestaudio/best',
-        
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
-        
-        # Postprocessor (FFmpeg) O'CHIRILDI -> Tezlik 10x oshadi
     }
 
     title = "Audio"
@@ -112,23 +161,21 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
 
         clean_title = f"{title} - {author}".replace('/', '-').replace('\\', '-')
         
-        # Faylni qidiramiz (chunki u .m4a, .webm va hokazo bo'lishi mumkin)
-        # video_id.* bo'yicha glob qilamiz
         downloaded_file = _find_downloaded_file(Path(TMP_DIR), video_id)
         
         if downloaded_file:
-            return str(downloaded_file), f"{clean_title}{downloaded_file.suffix}"
+            filename = f"{clean_title}{downloaded_file.suffix}"
+            
+            # Keshga yozib qo'yamiz (hozircha fayl ID yo'q, u yuborilgandan keyin queue_worker'da qo'shilishi mumkin, 
+            # yoki shunchaki path ni saqlaymiz)
+            # Lekin eng muhimi queue_worker da update qilish.
+            return str(downloaded_file), filename, None
             
     except Exception as e:
         logger.error(f"Audio download error: {e}")
-        # Re-raise specific errors or return None?
-        # Let's return None for now as queue handler handles generic "None" as error, 
-        # but better to raise to show message.
-        # However, to avoid breaking changes let's try to map it if possible or just log.
-        # But user wants SPECIFIC message. So we SHOULD raise.
         raise e 
         
-    return None, None
+    return None, None, None
 
 
 async def download_video(
@@ -137,41 +184,38 @@ async def download_video(
     format_selector: Optional[str] = None,
     output_ext: Optional[str] = None,
     progress_hook: Optional[Callable[[dict], None]] = None
-) -> Optional[str]:
+) -> Tuple[Optional[str], Optional[str]]: # Returns (path, file_id)
     """Video yuklab olish"""
-    logger.info(f"DEBUG: download_video called for {url}")
-    logger.info(f"DEBUG: COMMON_OPTS ipv6={COMMON_OPTS.get('force_ipv6')}, client={COMMON_OPTS.get('extractor_args', {}).get('youtube', {}).get('player_client')}")
     
-    temp_file = None
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    
+    # 1. Keshni tekshirish
+    cached = await get_cached_media(url_hash)
+    if cached:
+        cached_file_id = cached.get('file_id')
+        if cached_file_id:
+            logger.info(f"Using cached file_id for video: {url}")
+            return None, cached_file_id
+            
+        cached_path = cached.get('path')
+        if cached_path and os.path.exists(cached_path):
+            logger.info(f"Using cached file for video: {url}")
+            return cached_path, None
+    
+    temp_file = Path(TMP_DIR) / f"{url_hash[:12]}_{chat_id}.mp4"
+    
     try:
-        url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
-        temp_file = Path(TMP_DIR) / f"{url_hash}_{chat_id}.mp4"
-        
-        if redis_client:
-            try:
-                cache_key = f"video:{url_hash}"
-                cached_path = await redis_client.get(cache_key)
-                if cached_path:
-                    cached_path_str = cached_path.decode() if isinstance(cached_path, bytes) else cached_path
-                    if os.path.exists(cached_path_str):
-                        return cached_path_str
-            except:
-                pass
-        
         if is_instagram_url(url):
             result = await download_instagram_direct(url, temp_file)
             if result and os.path.exists(result):
-                return result
+                return str(result), None
 
         format_selector = format_selector or "bestvideo*+bestaudio/best"
         merge_ext = output_ext if output_ext in {"mp4", "webm", "mkv"} else "mp4"
 
-        # YOUTUBE formatini Shorts va har xil sifatlarga moslab yangilash
         ydl_opts = {
             **COMMON_OPTS,
-            # Hech qanday formatni "majbur" qilmaymiz: mavjud bo'lgan eng yaxshi video+audio (yoki best) ni olamiz.
             'format': f"{format_selector}/best",
-            # Telegram uchun kerakli konteynerga remux (re-encode emas).
             'postprocessors': [{
                 'key': 'FFmpegVideoRemuxer',
                 'preferedformat': merge_ext,
@@ -192,14 +236,12 @@ async def download_video(
         except yt_dlp.utils.DownloadError as e:
             err_msg = str(e).lower()
             if "requested format is not available" in err_msg:
-                # 1-urinish: bestvideo+bestaudio fail bo'lsa -> best (bitta fayl, masalan format 18)
                 fallback_opts = {**ydl_opts, 'format': 'best'}
                 try:
                     logger.info(f"Retrying with format 'best' for {url}")
                     with yt_dlp.YoutubeDL(fallback_opts) as ydl:
                         await asyncio.to_thread(ydl.download, [url])
                 except yt_dlp.utils.DownloadError as e2:
-                    # Agar yana o'xshamasa -> error qaytarish
                     raise _map_download_error(str(e2).lower(), "video")
             else:
                 raise _map_download_error(err_msg, "video")
@@ -207,16 +249,11 @@ async def download_video(
         downloaded_file = temp_file if temp_file.exists() else _find_downloaded_file(temp_file.parent, temp_file.stem)
 
         if not downloaded_file:
-            return None
+            return None, None
 
-        if redis_client:
-            try:
-                await redis_client.setex(f"video:{url_hash}", 86400, str(downloaded_file).encode())
-            except:
-                pass
-        
-        return str(downloaded_file)
+        return str(downloaded_file), None
 
     except Exception as e:
         logger.error(f"Video download error: {e}", exc_info=True)
-        raise e # Re-raise to be caught by queue handler
+        raise e
+
