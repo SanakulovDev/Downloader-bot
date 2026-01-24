@@ -138,6 +138,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: downloader_rabbitmq
+    network_mode: "host"
     environment:
       - RABBITMQ_DEFAULT_USER=admin
       - RABBITMQ_DEFAULT_PASS=password
