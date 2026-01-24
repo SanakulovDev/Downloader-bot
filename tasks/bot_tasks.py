@@ -166,14 +166,37 @@ async def _process_music_task_async(
     bot, session = create_bot_session()
     lang = get_user_lang_sync(chat_id)
     try:
-        audio_path, filename = await download_audio(video_id, chat_id)
-        if audio_path:
+        audio_path, filename, file_id = await download_audio(video_id, chat_id)
+        
+        sent_message = None
+        if file_id:
+             # Reuse cached file_id
+             sent_message = await send_audio(bot, chat_id, file_id, filename, video_id)
+        elif audio_path:
             artist_name = "Unknown"
             if " - " in filename:
                 artist_name = filename.rsplit(" - ", 1)[1].replace(".m4a", "")
             cache_artist_name(video_id, artist_name)
 
-            await send_audio(bot, chat_id, audio_path, filename, video_id)
+            sent_message = await send_audio(bot, chat_id, audio_path, filename, video_id)
+        
+        if sent_message:
+            # Capture file_id and Cache
+            new_file_id = None
+            if sent_message.audio:
+                new_file_id = sent_message.audio.file_id
+            
+            if new_file_id:
+                url = f"https://www.youtube.com/watch?v={video_id}"
+                url_hash = sha256(url.encode()).hexdigest()
+                cache_data = {
+                    'path': audio_path if audio_path else "",
+                    'file_id': new_file_id,
+                    'filename': filename,
+                    'ts': int(time.time()),
+                    'type': 'audio'
+                }
+                await cache_media_result(url_hash, cache_data)
 
             if not is_media:
                 try:
