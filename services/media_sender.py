@@ -80,7 +80,7 @@ async def send_audio(
     return await bot.send_audio(
         chat_id=chat_id,
         audio=FSInputFile(audio_path, filename=filename),
-        caption=f"🎵 {filename.replace('.m4a', '')} \n🤖 " + settings.telegram_nickname,
+        caption=f"🎵 {filename.replace('.m4a', '')} \n\n🤖 " + settings.telegram_nickname,
         title=filename.replace('.m4a', ''),
         reply_markup=build_audio_keyboard(video_id)
     )

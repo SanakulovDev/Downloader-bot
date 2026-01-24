@@ -18,30 +18,16 @@ CACHE_TTL = 1800  # 30 minutes
 
 COMMON_OPTS = {
     'quiet': True,
-    'cookiefile': '/app/cookies.txt',
+    'cookiefile': '/app/cookies.txt', # Fayl mavjudligini tekshiring
     
-    # 2. IPv6
     'force_ipv4': True, 
     'force_ipv6': False,
-
-    # 3. MIJOZ: TV, WEB, ANDROID (Eng ko'p format uchun)
-    # 'extractor_args': {
-    #     'youtube': {
-    #         'player_client': ['android', 'ios', 'web'],
-    #     }
-    # },
-    
-    # 4. REMOTE COMPONENTS
     'remote_components': ['ejs:github'],
-
-    # 5. User Agent
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
 
     'no_warnings': True,
     'ignoreerrors': True,
     'nocheckcertificate': True,
-    'youtube_include_dash_manifest': True,
-    'youtube_include_hls_manifest': True,
     
     # Aria2c Configuration
     'external_downloader': 'aria2c',
@@ -50,11 +36,13 @@ COMMON_OPTS = {
         '--split=5',
         '--min-split-size=1M',
     ],
-    
-    'http_chunk_size': 10485760,
+    # RAM tejash uchun buffer o'lchami
+    'buffersize': 1024 * 16, # 16KB buffer
+    'http_chunk_size': 5242880, # 5MB chunk (RAM to'lib qolmasligi uchun)
+
     'retries': 5,
-    'fragment_retries': 5,
-    'socket_timeout': 15,
+    'fragment_retries': 10,
+    'socket_timeout': 10,
 }
 
 def _map_download_error(err_msg: str, media_type: str) -> Exception:
