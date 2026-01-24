@@ -14,7 +14,7 @@ services:
     env_file: ./app/.env
     network_mode: "host" # Contabo ulanishi uchun 5432 porti ochiq bo'lishi kerak
 
- downloader-bot:
+  downloader-bot:
     build: .
     container_name: tg_bot_gateway
     restart: always
