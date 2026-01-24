@@ -229,8 +229,8 @@ async def handle_video_logic(message: Message, url: str):
     #     url=url,
     #     status_message_id=status_msg.message_id
     # )
-    from utils.queue_worker import submit_video_task
-    submit_video_task(
+    from tasks.bot_tasks import process_video_task
+    process_video_task.delay(
         chat_id=chat_id,
         url=url,
         status_message_id=status_msg.message_id
@@ -508,8 +508,8 @@ async def handle_video_format(callback: CallbackQuery):
     #     format_selector=format_selector,
     #     output_ext=output_ext
     # )
-    from utils.queue_worker import submit_video_task
-    submit_video_task(
+    from tasks.bot_tasks import process_video_task
+    process_video_task.delay(
         chat_id=callback.message.chat.id,
         url=url,
         status_message_id=status_message_id,

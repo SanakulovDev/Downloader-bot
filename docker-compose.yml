@@ -81,10 +81,40 @@ services:
       - DB_HOST=127.0.0.1
       # TEMP_DIR ni to'g'riladik (shmsh dagi 'sh' olib tashlandi)
       - TEMP_DIR=/dev/shm 
+      - CELERY_BROKER_URL=amqp://admin:password@127.0.0.1:5672//
+      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1 
     ulimits:
       nofile:
         soft: 65535  
         hard: 65535
+
+  worker:
+    build: .
+    container_name: downloader_worker
+    restart: always
+    network_mode: "host"
+    depends_on:
+      - redis
+      - postgres
+      - rabbitmq
+    deploy:
+      resources:
+        limits:
+          # Workerlarga ko'proq resurs ajratamiz (ffmpeg uchun)
+          cpus: '2.0'
+          memory: 1024M
+    volumes:
+      - .:/app
+      - /dev/shm:/dev/shm
+    env_file:
+      - ./app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HELP=1
+      - CELERY_BROKER_URL=amqp://admin:password@127.0.0.1:5672//
+      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1
+    command: celery -A tasks.celery_app worker --loglevel=info --concurrency=4
+
 
   telegram-bot-api:
     image: aiogram/telegram-bot-api:latest
@@ -104,7 +134,19 @@ services:
     deploy:
       resources:
         limits:
-          memory: 600M
+          memory: 300M
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: downloader_rabbitmq
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=password
+    network_mode: "host" # Redis va Postgres bilan bir xil rejimda
+    deploy:
+      resources:
+        limits:
+          memory: 300M # RAM juda kam bo'lgani uchun cheklaymiz
 
 volumes:
   redis_data:

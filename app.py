@@ -51,9 +51,9 @@ async def main():
     from utils.cleanup import cleanup_worker
     cleanup_task = asyncio.create_task(cleanup_worker())
 
-    # Start Background Task Worker (Threading)
-    from utils.queue_worker import start_worker
-    start_worker()
+    # Start Background Task Worker (Threading) - REMOVED (Replaced by Celery)
+    # from utils.queue_worker import start_worker
+    # start_worker()
     
     # Register Middleware
     from utils.middlewares.activity import ActivityMiddleware

@@ -312,8 +312,8 @@ async def handle_music_callback(callback: CallbackQuery):
     #     is_media=is_media,
     #     status_message_id=status_msg.message_id if status_msg else None
     # )
-    from utils.queue_worker import submit_music_task
-    submit_music_task(
+    from tasks.bot_tasks import process_music_task
+    process_music_task.delay(
         chat_id=callback.message.chat.id,
         video_id=video_id,
         message_id=callback.message.message_id,
