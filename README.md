@@ -1,123 +1,166 @@
-# ⚡ SuperFast Python Telegram Downloader Bot
+# 🤖 Universal Media Downloader Bot
 
-**Eng tez va samarali** YouTube va Instagram video downloader bot.
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Aiogram](https://img.shields.io/badge/Aiogram-3.x-blueviolet.svg?logo=telegram)](https://docs.aiogram.dev/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-## 🚀 Nima uchun Python?
+**Universal Media Downloader** — bu Telegram orqali YouTube, Instagram va YouTube Music platformalaridan video va audio yuklab olish uchun yaratilgan yuqori tezlikdagi va zamonaviy bot. Loyiha eng so'nggi texnologiyalar (Asyncio, Redis, Celery) asosida qurilgan bo'lib, yuqori yuklamalarda ham barqaror ishlashga mo'ljallangan.
 
-✅ **Juda tez** - Async/await bilan parallel processing  
-✅ **yt-dlp integratsiyasi** - Python library sifatida to'g'ridan-to'g'ri ishlatiladi  
-✅ **aiogram** - Eng tez async Telegram bot framework  
-✅ **Oson integratsiya** - Barcha tool'lar Python da  
+---
 
-## 📋 Talablar
+## 🔥 Asosiy Imkoniyatlar
 
-- Python 3.11+
+### 📹 YouTube
+
+- **Video yuklash**: Yuqori sifatli (1080p, 4K gacha) videolarni yuklash.
+- **Audio ajratish**: Videodan faqat audio (MP3) trekni ajratib olish.
+- **Playlistlar**: Butun playlistni bittada yuklash imkoniyati (kelajakda).
+- **Tezlik**: `aria2c` multi-connection orqali maksimal tezlik.
+
+### 📸 Instagram
+
+- **Barcha turdagi kontent**: Reels, Posts, Stories va IGTV.
+- **No-Login**: Instagram akkauntga kirish talab qilinmaydi (ba'zi hollarda).
+- **Carousel**: Ko'p rasmli postlarni to'liq yuklash.
+
+### 🎵 YouTube Music
+
+- **Qidiruv**: Qo'shiq nomi yoki ijrochi bo'yicha qidirish.
+- **Lyrics va Metadata**: Albom rasmi, ijrochi va qo'shiq nomi bilan to'liq fayl.
+- **Yuqori Sifat**: 320kbps gacha audio sifati.
+
+### 🚀 Texnik Ustunliklar
+
+- **Redis Cache**: So'rovlarni keshlash orqali qayta yuklashlarni 10x kamaytirish.
+- **Admin Panel**: Foydalanuvchilar statistikasi va bot boshqaruvi.
+- **Background Tasks**: Celery va RabbitMQ yordamida og'ir vazifalarni fonda bajarish.
+- **Dockerized**: To'liq Docker containerlarda ishlashga tayyor.
+
+---
+
+## 🛠 Texnologiyalar Stacki
+
+- **Core**: Python 3.11, [Aiogram 3](https://docs.aiogram.dev/)
+- **Downloaders**: [yt-dlp](https://github.com/yt-dlp/yt-dlp), [Instaloader](https://instaloader.github.io/)
+- **Music API**: [ytmusicapi](https://github.com/sigma67/ytmusicapi), [ShazamIO](https://github.com/shazamio/shazamio)
+- **Database**: PostgreSQL (SQLAlchemy + AsyncPG)
+- **Cache & Broker**: Redis, RabbitMQ
+- **Task Queue**: Celery
+
+---
+
+## 🚀 O'rnatish va Ishga Tushirish
+
+### Talablar
+
 - Docker va Docker Compose
-- Ngrok (webhook uchun)
-- Telegram Bot Token
+- Telegram Bot Token ([BotFather](https://t.me/BotFather))
 
-## 🔧 O'rnatish
+### 1. Loyihani yuklab olish
 
-### 1. Konfiguratsiya
 ```bash
-cp app/.env.example app/.env
-# app/.env faylini ochib, TELEGRAM_BOT_TOKEN ni kiriting
+git clone https://github.com/username/downloader-bot.git
+cd downloader-bot
 ```
 
-### 2. Docker orqali ishga tushirish (Tavsiya etiladi)
+### 2. Konfiguratsiya
+
+`app/.env.example` namunasidan nusxa olib, `.env` faylini yarating va sozlab chiqing:
+
+```bash
+cp app/.env.example app/.env
+nano app/.env
+```
+
+**Muhim o'zgaruvchilar (.env):**
+
+```env
+BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+ADMINS=123456789,987654321
+DB_USER=postgres
+DB_PASS=postgres_pass
+DB_NAME=downloader_db
+DB_HOST=postgres
+REDIS_HOST=redis
+```
+
+### 3. Docker orqali ishga tushirish (Tavsiya etiladi)
+
+Loyihani to'liq (DB, Redis, Workerlar bilan) ishga tushirish uchun:
 
 ```bash
 docker-compose up -d --build
 ```
 
-### 3. Yoki lokal ishga tushirish
+Loglarni kuzatish:
 
 ```bash
-# Dependencies o'rnatish
-pip install -r requirements.txt
-
-# Bot ni ishga tushirish (polling)
-python bot.py
-```
-
-### 4. Webhook orqali ishga tushirish (ngrok)
-
-```bash
-# Birinchi terminalda ngrok
-ngrok http 8080
-
-# Ikkinchi terminalda webhook setup
-./setup-webhook.sh
-
-# Uchinchi terminalda webhook server
-python webhook_server.py
-```
-
-## 🎯 Ishlatish
-
-Botga YouTube yoki Instagram video linkini yuboring:
-- `https://www.youtube.com/watch?v=...`
-- `https://www.instagram.com/reel/...`
-- `https://www.instagram.com/p/...`
-
-Bot video ni **juda tez** yuklab olib, sizga yuboradi!
-
-## ⚡ Professional Level Optimizations
-
-### 🔥 Instagram Direct JSON API (20x Tezroq)
-- Instagram JSON API (`?__a=1&__d=dis`) orqali to'g'ridan-to'g'ri MP4 link
-- 100% original sifat (no recompress)
-- `instaloader` dan 20x tezroq
-
-### 🔥 YouTube yt-dlp Optimizatsiyalari
-- **Aria2c** - 16 parallel connections (juda tez!)
-- **Throttling bypass** - YouTube tezlikni kamaytirishni chetlab o'tish
-- **Silent download** - progress bar yo'q (tezroq)
-- **Best format selection** - eng yuqori sifat
-
-### 🔥 Redis Cache (10x Resurs Tejash)
-- Bir URL bir marta yuklab olish, keyin cache dan berish
-- 1 soat cache muddati
-- 10x resurs tejash
-
-### 🔥 Document Sifatida Yuborish (Lossless)
-- Original file sifatida yuborish (Telegram qayta ishlamaydi)
-- 2GB limit (50MB emas!)
-- 100% original sifat
-
-### 🔥 Docker Optimizatsiyalari
-- `/dev/shm` mount (RAM-disk) - 2-5x tezroq
-- **Ulimits** - ko'p fayl ochilganda bot yiqilmaydi
-- **FFmpeg multi-thread** - multi-core CPU dan to'liq foydalanish
-
-**Batafsil:** [OPTIMIZATIONS.md](OPTIMIZATIONS.md)
-
-## 📊 PHP vs Python
-
-| Xususiyat | PHP | Python |
-|-----------|-----|--------|
-| Tezlik | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| yt-dlp integratsiya | Subprocess | Native library |
-| Async support | Limited | Full async/await |
-| Memory usage | O'rtacha | Yaxshi |
-| Development speed | O'rtacha | Tez |
-
-## 🔍 Tuzatish
-
-```bash
-# Docker loglarini ko'rish
 docker-compose logs -f
-
-# Webhook ma'lumotlarini tekshirish
-curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 ```
 
-## 📝 Fayllar
+---
 
-- `bot.py` - Asosiy bot kodi (polling)
-- `webhook_server.py` - Webhook server (ngrok uchun)
-- `requirements.txt` - Python dependencies
-- `Dockerfile` - Docker image
-- `docker-compose.yml` - Docker Compose config
-- `setup-webhook.sh` - Webhook setup script
+## 🖥 Lokal Ishga Tushirish (Development)
 
+Agar Docker ishlatmasdan, to'g'ridan-to'g'ri Python orqali ishlatmoqchi bo'lsangiz:
+
+1. **Virtual muhit yaratish:**
+
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+2. **Kutubxonalarni o'rnatish:**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Xizmatlarni ishga tushirish:**
+   Sizga lokal Redis va PostgreSQL kerak bo'ladi. Ular ishga tushgach, `.env` faylida `localhost` deb ko'rsating.
+
+4. **Botni ishga tushirish:**
+   ```bash
+   python bot.py
+   ```
+
+---
+
+## 📁 Loyiha Tuzilishi
+
+```
+📂 downloader-bot
+├── 📂 app/              # Konfiguratsiya fayllari
+├── 📂 core/             # Asosiy sozlamalar (config, db)
+├── 📂 downloads/        # Vaqtinchalik yuklangan fayllar
+├── 📂 handlers/         # Telegram handlerlar (users, admins)
+├── 📂 keyboards/        # Tugmalar (inline, reply)
+├── 📂 services/         # Tashqi servislar (Youtube, Insta)
+├── 📂 tasks/            # Celery vazifalari
+├── 📂 utils/            # Yordamchi funksiyalar
+├── 📄 bot.py            # Asosiy kirish nuqtasi
+├── 📄 docker-compose.yml
+└── 📄 requirements.txt
+```
+
+---
+
+## ❓ Muammolar va Yechimlar
+
+**Q: Bot video yuklamayapti?**
+J: Serveringiz IP manzili YouTube yoki Instagram tomonidan bloklangan bo'lishi mumkin. Proxy ishlatishni ko'rib chiqing.
+
+**Q: Dockerda xatolik: "No space left on device"?**
+J: `docker system prune -a` buyrug'i orqali eski container va imagelarni tozalang.
+
+---
+
+## 🤝 Hissa Qo'shish (Contributing)
+
+Loyihani rivojlantirishga hissa qo'shmoqchi bo'lsangiz, Pull Request yuborishingiz mumkin. Xatolik topgan bo'lsangiz, Issue oching.
+
+## 📄 Litsenziya
+
+Bu loyiha MIT litsenziyasi asosida tarqatiladi.
