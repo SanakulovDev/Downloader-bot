@@ -1,0 +1,4 @@
+# Faqat Contabo IP-sidan keladigan so'rovlarga ruxsat berish
+sudo ufw allow from 164.68.103.67 to any port 5672   # RabbitMQ
+sudo ufw allow from 164.68.103.67 to any port 5432   # Postgres
+sudo ufw allow from 164.68.103.67 to any port 6379   # Redis
