@@ -32,16 +32,14 @@ COMMON_OPTS = {
     # Aria2c Configuration
     'external_downloader': 'aria2c',
     'external_downloader_args': [
-        '--min-split-size=1M', 
-        '--max-connection-per-server=8', # 16 dan 8 ga tushirildi (CPU uchun)
-        '--split=8',
-        '--max-overall-download-limit=0', # Cheklovsiz tezlik
-    ],   
-    
+        '--max-connection-per-server=5', # 16 dan 5 ga tushirildi
+        '--split=5',
+        '--min-split-size=1M',
+    ],
     # RAM tejash uchun buffer o'lchami
     'buffersize': 1024 * 16, # 16KB buffer
     'http_chunk_size': 5242880, # 5MB chunk (RAM to'lib qolmasligi uchun)
-    
+
     'retries': 5,
     'fragment_retries': 10,
     'socket_timeout': 10,
@@ -182,7 +180,7 @@ async def download_video(
     format_selector: Optional[str] = None,
     output_ext: Optional[str] = None,
     progress_hook: Optional[Callable[[dict], None]] = None
-) -> Tuple[Optional[str], Optional[str]]: # Returns (path, file_id)
+) -> Tuple[Optional[str], Optional[str], Optional[str]]: # Returns (path, file_id, title)
     """Video yuklab olish"""
     
     url_hash = hashlib.md5(url.encode()).hexdigest()
@@ -228,9 +226,13 @@ async def download_video(
             ydl_opts['progress_hooks'] = [progress_hook]
 
         logger.info(f"Downloading Video: {url}")
+        video_title = "Video"
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                await asyncio.to_thread(ydl.download, [url])
+                # download=True performs the download and returns info
+                info_dict = await asyncio.to_thread(ydl.extract_info, url, download=True)
+                if info_dict:
+                    video_title = info_dict.get('title', 'Video')
         except yt_dlp.utils.DownloadError as e:
             err_msg = str(e).lower()
             if "requested format is not available" in err_msg:
@@ -238,7 +240,9 @@ async def download_video(
                 try:
                     logger.info(f"Retrying with format 'best' for {url}")
                     with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                        await asyncio.to_thread(ydl.download, [url])
+                        info_dict = await asyncio.to_thread(ydl.extract_info, url, download=True)
+                        if info_dict:
+                            video_title = info_dict.get('title', 'Video')
                 except yt_dlp.utils.DownloadError as e2:
                     raise _map_download_error(str(e2).lower(), "video")
             else:
@@ -247,9 +251,9 @@ async def download_video(
         downloaded_file = temp_file if temp_file.exists() else _find_downloaded_file(temp_file.parent, temp_file.stem)
 
         if not downloaded_file:
-            return None, None
+            return None, None, None
 
-        return str(downloaded_file), None
+        return str(downloaded_file), None, video_title
 
     except Exception as e:
         logger.error(f"Video download error: {e}", exc_info=True)
