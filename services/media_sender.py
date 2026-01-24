@@ -37,15 +37,17 @@ async def send_video(
     chat_id: int,
     video_path: str = None,
     url: str = None,
-    file_id: str = None  # Add file_id
+    file_id: str = None,  # Add file_id
+    title: str = "Video"
 ):
     settings = get_settings()
+    caption_text = f"📹 {title}\n\n🤖 {settings.telegram_nickname}"
     
     if file_id:
         return await bot.send_video(
             chat_id=chat_id,
             video=file_id,
-            caption="🤖 " + settings.telegram_nickname,
+            caption=caption_text,
             reply_markup=build_video_keyboard(url)
         )
 
@@ -54,14 +56,14 @@ async def send_video(
         return await bot.send_document(
             chat_id=chat_id,
             document=FSInputFile(video_path),
-            caption="🤖 " + settings.telegram_nickname,
+            caption=caption_text,
             reply_markup=build_video_keyboard(url)
         )
     elif video_path:
         return await bot.send_video(
             chat_id=chat_id,
             video=FSInputFile(video_path),
-            caption="🤖 " + settings.telegram_nickname,
+            caption=caption_text,
             reply_markup=build_video_keyboard(url)
         )
 

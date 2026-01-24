@@ -69,7 +69,7 @@ async def _process_video_task_async(
             )
             last_update = now
 
-        video_path, existing_file_id = await download_video(
+        video_path, existing_file_id, video_title = await download_video(
             url,
             chat_id,
             format_selector=format_selector,
@@ -79,9 +79,9 @@ async def _process_video_task_async(
         
         sent_message = None
         if existing_file_id:
-            sent_message = await send_video(bot, chat_id, video_path=None, url=url, file_id=existing_file_id)
+            sent_message = await send_video(bot, chat_id, video_path=None, url=url, file_id=existing_file_id, title=video_title)
         elif video_path:
-            sent_message = await send_video(bot, chat_id, video_path=video_path, url=url)
+            sent_message = await send_video(bot, chat_id, video_path=video_path, url=url, title=video_title)
              
              # Cache the file_id if sending was successful
             if sent_message and sent_message.video:
