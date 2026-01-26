@@ -16,6 +16,14 @@ from utils.i18n import get_user_lang_sync, translate_error, t
 
 logger = logging.getLogger(__name__)
 
+async def _remove_file_if_exists(path: str) -> None:
+    try:
+        await asyncio.to_thread(os.remove, path)
+    except FileNotFoundError:
+        return
+    except Exception as e:
+        logger.error(f"Failed to remove file: {e}")
+
 
 @celery_app.task(name='tasks.process_video_task')
 def process_video_task(
@@ -89,11 +97,8 @@ async def _process_video_task_async(
                 await cache_media_result(url_hash, {'file_id': sent_message.video.file_id})
             
             # Remove file from RAM/Disk (ALWAYS)
-            try:
-                if os.path.exists(video_path):
-                    os.remove(video_path)
-            except Exception as e:
-                logger.error(f"Failed to remove video file: {e}")
+            if video_path:
+                await _remove_file_if_exists(video_path)
 
         if sent_message:
             if status_message_id:
@@ -205,11 +210,8 @@ async def _process_music_task_async(
                     pass
 
             # Cleanup audio file
-            try:
-                if audio_path and os.path.exists(audio_path):
-                     os.remove(audio_path)
-            except Exception as e:
-                logger.error(f"Failed to remove audio file: {e}")
+            if audio_path:
+                await _remove_file_if_exists(audio_path)
 
             if status_message_id:
                 try:

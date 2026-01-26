@@ -24,7 +24,7 @@ async def search_music(query: str):
 
     try:
         # Search via YTMusic
-        results = await yt_music_service.search_songs(query, limit=50)
+        results = await yt_music_service.search_songs(query, limit=20)
         
         final_results = []
         for r in results:
@@ -35,8 +35,7 @@ async def search_music(query: str):
                 'id': r['id'],
                 'title': display_title,
                 'duration': r['duration'],
-                'channel': r['artist'],
-                'thumbnail': r['thumbnail']
+                'channel': r['artist']
             })
             
         if final_results and redis_client:

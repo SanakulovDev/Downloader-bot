@@ -20,6 +20,7 @@ from utils.i18n import get_user_lang, t
 
 logger = logging.getLogger(__name__)
 router = Router()
+YTDLP_INFO_TIMEOUT = 60
 
 @router.callback_query(F.data.startswith('recognize_music:'))
 async def handle_recognize_music(callback: CallbackQuery):
@@ -370,6 +371,28 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     )
     return caption, InlineKeyboardMarkup(inline_keyboard=buttons)
 
+def _compact_info(info: dict) -> dict:
+    formats = []
+    for fmt in info.get("formats") or []:
+        formats.append({
+            "format_id": fmt.get("format_id"),
+            "height": fmt.get("height"),
+            "ext": fmt.get("ext"),
+            "vcodec": fmt.get("vcodec"),
+            "acodec": fmt.get("acodec"),
+            "tbr": fmt.get("tbr"),
+            "filesize": fmt.get("filesize"),
+            "filesize_approx": fmt.get("filesize_approx"),
+        })
+    return {
+        "id": info.get("id"),
+        "title": info.get("title"),
+        "uploader": info.get("uploader"),
+        "duration": info.get("duration"),
+        "thumbnail": info.get("thumbnail"),
+        "formats": formats,
+    }
+
 async def _fetch_video_info(url: str) -> dict | None:
     from loader import redis_client
     url_key = None
@@ -383,25 +406,54 @@ async def _fetch_video_info(url: str) -> dict | None:
                 return json.loads(cached)
         except Exception:
             pass
-    def _extract() -> dict | None:
-        ydl_opts = {
+    def _extract(opts=None) -> dict | None:
+        opts = opts or {
             **COMMON_OPTS,
             'skip_download': True,
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(url, download=False)
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            try:
+                return ydl.extract_info(url, download=False)
+            except Exception:
+                return None
+
     try:
-        info = await asyncio.to_thread(_extract)
+        # 1-urinish
+        info = await asyncio.wait_for(asyncio.to_thread(_extract), timeout=YTDLP_INFO_TIMEOUT)
+        
+        # Agar o'xshamasa (formatsiz qaytsa yoki None bo'lsa)
+        if not info:
+             # Cookiesiz urinib ko'ramiz
+            fallback_opts = {
+                **COMMON_OPTS,
+                'skip_download': True,
+                'quiet': True,
+                'no_warnings': True,
+                'ignoreerrors': True,
+            }
+            if 'cookiefile' in fallback_opts:
+                del fallback_opts['cookiefile']
+            
+            info = await asyncio.wait_for(
+                asyncio.to_thread(_extract, fallback_opts),
+                timeout=YTDLP_INFO_TIMEOUT
+            )
+
         if info and redis_client and url_key:
             try:
                 import json
-                await redis_client.setex(url_key, 300, json.dumps(info))
+                compact = _compact_info(info)
+                await redis_client.setex(url_key, 300, json.dumps(compact))
             except Exception:
                 pass
-        return info
+        if info:
+            return _compact_info(info)
+        return None
+    except asyncio.TimeoutError:
+        return None
     except Exception:
         return None
 

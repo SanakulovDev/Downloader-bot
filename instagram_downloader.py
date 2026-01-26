@@ -3,12 +3,64 @@ Instagram direct MP4 downloader - JSON API orqali
 20x tezroq va 100% original sifat
 """
 import aiohttp
+import aiofiles
+import asyncio
 import json
 import logging
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+JSON_TIMEOUT = aiohttp.ClientTimeout(total=15, connect=5, sock_read=10)
+VIDEO_TIMEOUT = aiohttp.ClientTimeout(total=None, connect=10, sock_read=60)
+MAX_RETRIES = 3
+
+
+async def _fetch_json(session: aiohttp.ClientSession, url: str, headers: dict) -> Optional[dict]:
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            async with session.get(url, headers=headers, timeout=JSON_TIMEOUT) as response:
+                if response.status != 200:
+                    raise aiohttp.ClientResponseError(
+                        request_info=response.request_info,
+                        history=response.history,
+                        status=response.status,
+                        message="Instagram API error",
+                        headers=response.headers
+                    )
+                return await response.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError) as e:
+            logger.warning(f"Instagram JSON fetch attempt {attempt} failed: {e}")
+            if attempt >= MAX_RETRIES:
+                return None
+            await asyncio.sleep(0.5 * attempt)
+    return None
+
+
+async def _download_file(session: aiohttp.ClientSession, url: str, output_path: Path, headers: dict) -> bool:
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            async with session.get(url, headers=headers, timeout=VIDEO_TIMEOUT) as response:
+                if response.status != 200:
+                    raise aiohttp.ClientResponseError(
+                        request_info=response.request_info,
+                        history=response.history,
+                        status=response.status,
+                        message="Instagram download error",
+                        headers=response.headers
+                    )
+                async with aiofiles.open(output_path, 'wb') as f:
+                    async for chunk in response.content.iter_chunked(8192):
+                        await f.write(chunk)
+                return True
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.warning(f"Instagram download attempt {attempt} failed: {e}")
+            if attempt >= MAX_RETRIES:
+                return False
+            await asyncio.sleep(0.5 * attempt)
+    return False
 
 
 async def download_instagram_direct(url: str, output_path: Path) -> Optional[str]:
@@ -34,12 +86,10 @@ async def download_instagram_direct(url: str, output_path: Path) -> Optional[str
         
         async with aiohttp.ClientSession() as session:
             # JSON ma'lumotlarni olish
-            async with session.get(json_url, headers=headers) as response:
-                if response.status != 200:
-                    logger.error(f"Instagram API error: {response.status}")
-                    return None
-                
-                data = await response.json()
+            data = await _fetch_json(session, json_url, headers)
+            if not data:
+                logger.error("Instagram API error: failed to fetch JSON")
+                return None
             
             # Video URL ni topish
             video_url = None
@@ -74,15 +124,10 @@ async def download_instagram_direct(url: str, output_path: Path) -> Optional[str
             logger.info(f"Found Instagram video URL: {video_url[:50]}...")
             
             # Video ni yuklab olish
-            async with session.get(video_url, headers=headers) as video_response:
-                if video_response.status != 200:
-                    logger.error(f"Video download error: {video_response.status}")
-                    return None
-                
-                # Video ni faylga yozish
-                with open(output_path, 'wb') as f:
-                    async for chunk in video_response.content.iter_chunked(8192):
-                        f.write(chunk)
+            downloaded = await _download_file(session, video_url, output_path, headers)
+            if not downloaded:
+                logger.error("Video download error: failed to download")
+                return None
             
             logger.info(f"Instagram video downloaded: {output_path}")
             return str(output_path)

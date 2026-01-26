@@ -3,6 +3,7 @@ yt-dlp @ git+https://github.com/yt-dlp/yt-dlp@master
 python-dotenv>=1.0.0
 redis[hiredis]>=5.0.0
 shazamio>=0.5.0
+aiofiles
 asyncpg
 sqlalchemy
 fastapi

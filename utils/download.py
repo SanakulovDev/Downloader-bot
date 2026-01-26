@@ -4,7 +4,7 @@ import hashlib
 import logging
 import time
 from pathlib import Path
-from typing import Tuple, Optional, Callable, Dict, Any
+from typing import Tuple, Optional, Callable, Dict, Any, Union
 import yt_dlp
 import msgpack
 from instagram_downloader import download_instagram_direct
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # --- CONFIG ---
 CACHE_TTL = 1800  # 30 minutes
+YTDLP_DOWNLOAD_TIMEOUT = 900  # seconds
 
 COMMON_OPTS = {
     'quiet': False,
@@ -47,6 +48,9 @@ COMMON_OPTS = {
     'socket_timeout': 30, # 10 soniya juda kam, YouTube ba'zan kechikadi
 
 }
+
+async def _path_exists(path: Union[str, os.PathLike]) -> bool:
+    return await asyncio.to_thread(os.path.exists, path)
 
 def _map_download_error(err_msg: str, media_type: str) -> Exception:
     if "larger than" in err_msg or "too large" in err_msg:
@@ -133,7 +137,7 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
             return None, cached.get('filename', 'audio.m4a'), cached_file_id
             
         # Agar fayl diskda bo'lsa
-        if cached_path and os.path.exists(cached_path):
+        if cached_path and await _path_exists(cached_path):
             logger.info(f"Using cached file for audio: {video_id}")
             return cached_path, cached.get('filename', 'audio.m4a'), None
 
@@ -151,10 +155,15 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
         
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=True)
+                info = await asyncio.wait_for(
+                    asyncio.to_thread(ydl.extract_info, url, download=True),
+                    timeout=YTDLP_DOWNLOAD_TIMEOUT
+                )
                 if info:
                     title = info.get('title', 'Audio')
                     author = info.get('uploader', 'Unknown')
+        except asyncio.TimeoutError:
+            raise Exception("❌ Yuklash vaqti tugadi. Keyinroq urinib ko'ring.")
         except yt_dlp.utils.DownloadError as e:
             raise _map_download_error(str(e).lower(), "audio")
 
@@ -197,7 +206,7 @@ async def download_video(
             return None, cached_file_id
             
         cached_path = cached.get('path')
-        if cached_path and os.path.exists(cached_path):
+        if cached_path and await _path_exists(cached_path):
             logger.info(f"Using cached file for video: {url}")
             return cached_path, None
     
@@ -206,7 +215,7 @@ async def download_video(
     try:
         if is_instagram_url(url):
             result = await download_instagram_direct(url, temp_file)
-            if result and os.path.exists(result):
+            if result and await _path_exists(result):
                 return str(result), None
 
         format_selector = format_selector or "bestvideo*+bestaudio/best"
@@ -233,21 +242,54 @@ async def download_video(
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 # download=True performs the download and returns info
-                info_dict = await asyncio.to_thread(ydl.extract_info, url, download=True)
+                info_dict = await asyncio.wait_for(
+                    asyncio.to_thread(ydl.extract_info, url, download=True),
+                    timeout=YTDLP_DOWNLOAD_TIMEOUT
+                )
                 if info_dict:
                     video_title = info_dict.get('title', 'Video')
+        except asyncio.TimeoutError:
+            raise Exception("❌ Yuklash vaqti tugadi. Keyinroq urinib ko'ring.")
         except yt_dlp.utils.DownloadError as e:
             err_msg = str(e).lower()
             if "requested format is not available" in err_msg:
-                fallback_opts = {**ydl_opts, 'format': 'best'}
                 try:
-                    logger.info(f"Retrying with format 'best' for {url}")
-                    with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                        info_dict = await asyncio.to_thread(ydl.extract_info, url, download=True)
+                    # 1. Fallback: Request qilingan formatni cookiesiz urinib ko'rish
+                    logger.info(f"Retrying with original format without cookies for {url}")
+                    fallback_opts_1 = {**ydl_opts}
+                    if 'cookiefile' in fallback_opts_1:
+                        del fallback_opts_1['cookiefile']
+                    
+                    with yt_dlp.YoutubeDL(fallback_opts_1) as ydl:
+                        info_dict = await asyncio.wait_for(
+                            asyncio.to_thread(ydl.extract_info, url, download=True),
+                            timeout=YTDLP_DOWNLOAD_TIMEOUT
+                        )
                         if info_dict:
                             video_title = info_dict.get('title', 'Video')
-                except yt_dlp.utils.DownloadError as e2:
-                    raise _map_download_error(str(e2).lower(), "video")
+
+                except asyncio.TimeoutError:
+                    raise Exception("❌ Yuklash vaqti tugadi. Keyinroq urinib ko'ring.")
+                except yt_dlp.utils.DownloadError as e_opt:
+                     # 2. Fallback: Agar o'xshamasa, 'best' formatni cookiesiz urinib ko'rish
+                    logger.warning(f"Original format retry failed: {e_opt}. Trying 'best' format...")
+                    
+                    fallback_opts_2 = {**ydl_opts, 'format': 'best'}
+                    if 'cookiefile' in fallback_opts_2:
+                        del fallback_opts_2['cookiefile']
+                    
+                    try:
+                        with yt_dlp.YoutubeDL(fallback_opts_2) as ydl:
+                            info_dict = await asyncio.wait_for(
+                                asyncio.to_thread(ydl.extract_info, url, download=True),
+                                timeout=YTDLP_DOWNLOAD_TIMEOUT
+                            )
+                            if info_dict:
+                                video_title = info_dict.get('title', 'Video')
+                    except asyncio.TimeoutError:
+                        raise Exception("❌ Yuklash vaqti tugadi. Keyinroq urinib ko'ring.")
+                    except yt_dlp.utils.DownloadError as e2:
+                         raise _map_download_error(str(e2).lower(), "video")
             else:
                 raise _map_download_error(err_msg, "video")
 
