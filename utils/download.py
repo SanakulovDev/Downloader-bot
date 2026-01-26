@@ -19,15 +19,12 @@ CACHE_TTL = 1800  # 30 minutes
 COMMON_OPTS = {
     'quiet': False,
     'cookiefile': '/app/cookies.txt',
-    
-    'force_ipv4': True, 
+    'force_ipv4': True,
     'force_ipv6': False,
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-
     'no_warnings': True,
     'ignoreerrors': False,
     'nocheckcertificate': True,
-    
     # Aria2c Configuration
     'external_downloader': 'aria2c',
     'external_downloader_args': [
@@ -37,19 +34,18 @@ COMMON_OPTS = {
         '--max-overall-download-limit=0',
         '--file-allocation=none',
         # QUYIDAGI 3 TA QATORNI QO'SHING (Time out va ulanish xatolari uchun)
-        '--connect-timeout=60',          # Ulanishni uzoqroq kutish
-        '--timeout=60',                  # O'qish timeoutni oshirish
-        '--retry-wait=5',                # Xato bo'lsa 5 soniya kutib qayta urunish
+        '--connect-timeout=60', # Ulanishni uzoqroq kutish
+        '--timeout=60', # O'qish timeoutni oshirish
+        '--retry-wait=5', # Xato bo'lsa 5 soniya kutib qayta urunish
         '--stream-piece-selector=random',# YouTube cheklovidan qochish uchun bo'laklarni random tanlash
     ],
-    
     # HTTP sozlamalari
-    'buffersize': 1024 * 1024,   # 1MB buffer (8GB RAM-da bu juda xavfsiz va tezroq)
+    'buffersize': 1024 * 1024, # 1MB buffer (8GB RAM-da bu juda xavfsiz va tezroq)
     'http_chunk_size': 10485760, # 10MB chunk
-    
-    'retries': 10,               # Qayta urunishlar sonini oshirdik
-    'fragment_retries': 20,      # Fragment xatolarida ko'proq urunish
-    'socket_timeout': 30,        # 10 soniya juda kam, YouTube ba'zan kechikadi
+    'retries': 10, # Qayta urunishlar sonini oshirdik
+    'fragment_retries': 20, # Fragment xatolarida ko'proq urunish
+    'socket_timeout': 30, # 10 soniya juda kam, YouTube ba'zan kechikadi
+
 }
 
 def _map_download_error(err_msg: str, media_type: str) -> Exception:
