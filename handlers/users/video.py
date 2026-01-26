@@ -254,18 +254,19 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         is_merge = str(item.get("is_merge", 0))
         size_bytes = item.get("size_bytes") or 0
         ext = item.get("ext") or "mp4"
+        label = _format_quality_label(height)
         size_mb = "?"
         if size_bytes:
             size_mb = t("size_mb", lang, mb=round(size_bytes / (1024 * 1024), 1))
         
-        format_lines.append(t("format_line", lang, height=height, size=size_mb))
+        format_lines.append(t("format_line", lang, height=label, size=size_mb))
 
         # Pattern: vf:{video_id}:{fmt_id}:{is_merge}:{ext}
         vid = info.get('id')
         
         row.append(
             InlineKeyboardButton(
-                text=f"{height}p", 
+                text=label, 
                 callback_data=f"vf:{vid}:{format_id}:{is_merge}:{ext}"
             )
         )
@@ -289,6 +290,50 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
         formats="\n".join(format_lines)
     )
     return caption, InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def _format_quality_label(height: int | None) -> str:
+    if height == 2160:
+        return "4K"
+    if height == 1440:
+        return "2K"
+    if height == 1080:
+        return "HD"
+    if height:
+        return f"{height}p"
+    return "N/A"
+
+
+def _render_progress_bar(percent: int) -> str:
+    width = 12
+    pct = max(0, min(100, percent))
+    filled = int(width * pct / 100)
+    return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
+
+
+async def _get_cached_format_info(video_id: str, format_id: str) -> dict:
+    from loader import redis_client
+    if not redis_client:
+        return {}
+    try:
+        import hashlib
+        import json
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        url_key = f"yt_info:{hashlib.md5(url.encode()).hexdigest()}"
+        cached = await redis_client.get(url_key)
+        if not cached:
+            return {}
+        info = json.loads(cached)
+        for item in info.get("items") or []:
+            if item.get("format_id") == format_id:
+                return {
+                    "title": info.get("title"),
+                    "uploader": info.get("uploader"),
+                    "height": item.get("height"),
+                }
+    except Exception:
+        return {}
+    return {}
 
 async def _fetch_video_info(url: str) -> dict | None:
     from loader import redis_client
@@ -334,6 +379,7 @@ async def _send_fast_preview(bot, chat_id: int, url: str, lang: str):
     thumb = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
 
     caption = t("preview_header", lang, title=title or "Video", uploader=author or "")
+    caption = f"{caption}\n\n{t('formats_loading', lang)}"
     try:
         return await bot.send_photo(
             chat_id=chat_id,
@@ -389,30 +435,44 @@ async def handle_video_format(callback: CallbackQuery):
     format_id = data[2]
     is_merge = data[3]
     output_ext = data[4]
-    
+
     format_selector = get_format_selector(format_id, is_merge)
     from loader import redis_client
     lang = await get_user_lang(callback.from_user.id, redis_client)
 
     await callback.answer(t("video_loading", lang), show_alert=False)
     status_message_id = callback.message.message_id
-    deleted = await safe_delete_message(callback.message)
-    if deleted:
-        status_msg = await callback.message.answer(
-            t("video_loading", lang),
-            parse_mode='HTML',
-            disable_web_page_preview=True
-        )
-        status_message_id = status_msg.message_id
-    else:
+
+    cached_info = await _get_cached_format_info(video_id, format_id)
+    format_label = _format_quality_label(cached_info.get("height")) if cached_info else ""
+    title = cached_info.get("title") or ""
+    uploader = cached_info.get("uploader") or ""
+    if not title or not uploader:
         try:
-            await callback.message.edit_reply_markup(reply_markup=None)
+            oembed = await _fetch_oembed(f"https://www.youtube.com/watch?v={video_id}")
+            title = title or (oembed.get("title") if oembed else "") or "Video"
+            uploader = uploader or (oembed.get("author_name") if oembed else "") or ""
         except Exception:
-            pass
-        try:
-            await callback.message.edit_caption(t("video_loading", lang), parse_mode='HTML')
-        except Exception:
-            await safe_edit_text(callback.message, t("video_loading", lang), parse_mode='HTML')
+            title = title or "Video"
+    format_line = t("format_label", lang, label=format_label) if format_label else ""
+    initial_caption = t(
+        "video_progress_caption",
+        lang,
+        title=title,
+        uploader=uploader,
+        format=format_line,
+        percent="0%",
+        bar=_render_progress_bar(0),
+    )
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    try:
+        await callback.message.edit_caption(initial_caption, parse_mode='HTML')
+    except Exception:
+        await safe_edit_text(callback.message, initial_caption, parse_mode='HTML')
 
     url = f"https://www.youtube.com/watch?v={video_id}"
     # process_video_task.delay(
@@ -428,7 +488,10 @@ async def handle_video_format(callback: CallbackQuery):
         url=url,
         status_message_id=status_message_id,
         format_selector=format_selector,
-        output_ext=output_ext
+        output_ext=output_ext,
+        format_label=format_label,
+        title=title,
+        uploader=uploader,
     )
 
 @router.callback_query(F.data == 'delete_this_msg')

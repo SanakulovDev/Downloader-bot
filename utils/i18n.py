@@ -118,6 +118,18 @@ _TEXTS: dict[str, dict[str, str]] = {
         "uz": "⏳ <b>Video yuklanmoqda...</b> {percent}",
         "ru": "⏳ <b>Видео загружается...</b> {percent}",
     },
+    "video_progress_caption": {
+        "uz": "📹 {title}\n👤 {uploader}\n{format}\n\n⏳ <b>Video yuklanmoqda...</b> {percent}\n{bar}",
+        "ru": "📹 {title}\n👤 {uploader}\n{format}\n\n⏳ <b>Видео загружается...</b> {percent}\n{bar}",
+    },
+    "video_sent_caption": {
+        "uz": "📹 {title}\n👤 {uploader}\n{format}\n\n✅ Video yuborildi",
+        "ru": "📹 {title}\n👤 {uploader}\n{format}\n\n✅ Видео отправлено",
+    },
+    "format_label": {
+        "uz": "🎞 Format: {label}",
+        "ru": "🎞 Формат: {label}",
+    },
     "formats_loading": {
         "uz": "⏳ Formatlar yuklanmoqda...",
         "ru": "⏳ Форматы загружаются...",

@@ -21,3 +21,4 @@ redis_data_dir
 ngrok.log
 alembic.ini
 alembic
+instagramcookies.txt

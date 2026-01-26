@@ -7,6 +7,7 @@ import aiofiles
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -15,13 +16,56 @@ logger = logging.getLogger(__name__)
 
 JSON_TIMEOUT = aiohttp.ClientTimeout(total=15, connect=5, sock_read=10)
 VIDEO_TIMEOUT = aiohttp.ClientTimeout(total=None, connect=10, sock_read=60)
-MAX_RETRIES = 3
+MAX_RETRIES = int(os.getenv("INSTAGRAM_MAX_RETRIES", "3"))
+_COOKIE_CACHE: Optional[str] = None
+_PROXY_CACHE: Optional[str] = None
 
 
-async def _fetch_json(session: aiohttp.ClientSession, url: str, headers: dict) -> Optional[dict]:
+def _load_instagram_cookies() -> str:
+    global _COOKIE_CACHE
+    if _COOKIE_CACHE is not None:
+        return _COOKIE_CACHE
+
+    cookie_file = os.getenv("INSTAGRAM_COOKIE_FILE", "/app/instagramcookies.txt")
+    if not os.path.exists(cookie_file):
+        _COOKIE_CACHE = ""
+        return _COOKIE_CACHE
+
+    cookies: list[str] = []
+    try:
+        with open(cookie_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split("\t")
+                if len(parts) < 7:
+                    continue
+                domain, _flag, _path, _secure, _expiry, name, value = parts[:7]
+                if "instagram.com" not in domain:
+                    continue
+                cookies.append(f"{name}={value}")
+    except Exception as e:
+        logger.warning(f"Failed to load instagram cookies: {e}")
+        _COOKIE_CACHE = ""
+        return _COOKIE_CACHE
+
+    _COOKIE_CACHE = "; ".join(cookies)
+    return _COOKIE_CACHE
+
+
+def _load_instagram_proxy() -> str:
+    global _PROXY_CACHE
+    if _PROXY_CACHE is not None:
+        return _PROXY_CACHE
+    _PROXY_CACHE = os.getenv("INSTAGRAM_PROXY", "").strip()
+    return _PROXY_CACHE
+
+
+async def _fetch_json(session: aiohttp.ClientSession, url: str, headers: dict, proxy: str) -> Optional[dict]:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            async with session.get(url, headers=headers, timeout=JSON_TIMEOUT) as response:
+            async with session.get(url, headers=headers, timeout=JSON_TIMEOUT, proxy=proxy or None) as response:
                 if response.status != 200:
                     raise aiohttp.ClientResponseError(
                         request_info=response.request_info,
@@ -39,10 +83,10 @@ async def _fetch_json(session: aiohttp.ClientSession, url: str, headers: dict) -
     return None
 
 
-async def _download_file(session: aiohttp.ClientSession, url: str, output_path: Path, headers: dict) -> bool:
+async def _download_file(session: aiohttp.ClientSession, url: str, output_path: Path, headers: dict, proxy: str) -> bool:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            async with session.get(url, headers=headers, timeout=VIDEO_TIMEOUT) as response:
+            async with session.get(url, headers=headers, timeout=VIDEO_TIMEOUT, proxy=proxy or None) as response:
                 if response.status != 200:
                     raise aiohttp.ClientResponseError(
                         request_info=response.request_info,
@@ -83,10 +127,14 @@ async def download_instagram_direct(url: str, output_path: Path) -> Optional[str
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": "https://www.instagram.com/",
         }
+        cookie_header = _load_instagram_cookies()
+        if cookie_header:
+            headers["Cookie"] = cookie_header
+        proxy = _load_instagram_proxy()
         
         async with aiohttp.ClientSession() as session:
             # JSON ma'lumotlarni olish
-            data = await _fetch_json(session, json_url, headers)
+            data = await _fetch_json(session, json_url, headers, proxy)
             if not data:
                 logger.error("Instagram API error: failed to fetch JSON")
                 return None
@@ -124,7 +172,7 @@ async def download_instagram_direct(url: str, output_path: Path) -> Optional[str
             logger.info(f"Found Instagram video URL: {video_url[:50]}...")
             
             # Video ni yuklab olish
-            downloaded = await _download_file(session, video_url, output_path, headers)
+            downloaded = await _download_file(session, video_url, output_path, headers, proxy)
             if not downloaded:
                 logger.error("Video download error: failed to download")
                 return None

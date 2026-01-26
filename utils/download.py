@@ -628,6 +628,54 @@ async def download_video(
             if result and await _path_exists(result):
                 return str(result), None
 
+            # Fallback to yt-dlp for Instagram when direct JSON fails
+            format_selector = "best"
+            merge_ext = output_ext if output_ext in {"mp4", "webm", "mkv"} else "mp4"
+            ig_cookie = os.getenv("INSTAGRAM_COOKIE_FILE")
+            ig_proxy = os.getenv("INSTAGRAM_PROXY", "").strip() or None
+            ydl_opts = {
+                **COMMON_OPTS,
+                **({'cookiefile': ig_cookie} if ig_cookie else {}),
+                **({'proxy': ig_proxy} if ig_proxy else {}),
+                'quiet': True,
+                'logger': _YtDlpLogger(),
+                'format': format_selector,
+                'postprocessors': [{
+                    'key': 'FFmpegVideoRemuxer',
+                    'preferedformat': merge_ext,
+                }],
+                'merge_output_format': merge_ext,
+                'outtmpl': str(temp_file).replace('.mp4', '.%(ext)s'),
+                'noplaylist': True,
+                'cachedir': False,
+                'max_filesize': 2 * 1024 * 1024 * 1024,
+            }
+            # Avoid external downloader for IG to reduce failures
+            ydl_opts.pop("external_downloader", None)
+            ydl_opts.pop("external_downloader_args", None)
+            if progress_hook:
+                ydl_opts['progress_hooks'] = [progress_hook]
+
+            logger.info(f"Downloading Instagram via yt-dlp: {url}")
+            video_title = "Video"
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info_dict = await asyncio.wait_for(
+                        asyncio.to_thread(ydl.extract_info, url, download=True),
+                        timeout=YTDLP_DOWNLOAD_TIMEOUT
+                    )
+                    if info_dict:
+                        video_title = info_dict.get('title', 'Video')
+            except asyncio.TimeoutError:
+                raise Exception("❌ Yuklash vaqti tugadi. Keyinroq urinib ko'ring.")
+            except yt_dlp.utils.DownloadError as e:
+                raise _map_download_error(str(e).lower(), "video")
+
+            downloaded_file = temp_file if temp_file.exists() else _find_downloaded_file(temp_file.parent, temp_file.stem)
+            if not downloaded_file:
+                return None, None, None
+            return str(downloaded_file), None, video_title
+
         format_selector = format_selector or "bestvideo*+bestaudio/best"
         merge_ext = output_ext if output_ext in {"mp4", "webm", "mkv"} else "mp4"
 

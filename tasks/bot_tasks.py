@@ -31,7 +31,10 @@ def process_video_task(
     url: str,
     status_message_id: Optional[int] = None,
     format_selector: Optional[str] = None,
-    output_ext: Optional[str] = None
+    output_ext: Optional[str] = None,
+    format_label: Optional[str] = None,
+    title: Optional[str] = None,
+    uploader: Optional[str] = None,
 ) -> None:
     url_hash = sha256(url.encode()).hexdigest()[:16]
     lock_key = f"idempotency:video:{chat_id}:{url_hash}"
@@ -40,7 +43,18 @@ def process_video_task(
             asyncio.run(_delete_message_only(chat_id, status_message_id))
         return
     try:
-        asyncio.run(_process_video_task_async(chat_id, url, status_message_id, format_selector, output_ext))
+        asyncio.run(
+            _process_video_task_async(
+                chat_id,
+                url,
+                status_message_id,
+                format_selector,
+                output_ext,
+                format_label,
+                title,
+                uploader,
+            )
+        )
     finally:
         release_lock(lock_key)
 
@@ -50,13 +64,19 @@ async def _process_video_task_async(
     url: str,
     status_message_id: Optional[int],
     format_selector: Optional[str],
-    output_ext: Optional[str]
+    output_ext: Optional[str],
+    format_label: Optional[str],
+    title: Optional[str],
+    uploader: Optional[str],
 ) -> None:
     bot, session = create_bot_session()
     lang = get_user_lang_sync(chat_id)
     try:
         loop = asyncio.get_running_loop()
         last_update = 0.0
+        format_line = t("format_label", lang, label=format_label) if format_label else ""
+        display_title = title or "Video"
+        display_uploader = uploader or ""
 
         def progress_hook(data: dict) -> None:
             nonlocal last_update
@@ -68,9 +88,20 @@ async def _process_video_task_async(
             total = data.get("total_bytes") or data.get("total_bytes_estimate")
             downloaded = data.get("downloaded_bytes")
             percent = ""
+            bar = _render_progress_bar(0)
             if total and downloaded:
-                percent = f"{downloaded * 100 / total:.0f}%"
-            text = t("video_progress", lang, percent=percent)
+                pct = int(downloaded * 100 / total)
+                percent = f"{pct}%"
+                bar = _render_progress_bar(pct)
+            text = t(
+                "video_progress_caption",
+                lang,
+                title=display_title,
+                uploader=display_uploader,
+                format=format_line,
+                percent=percent,
+                bar=bar,
+            )
             asyncio.run_coroutine_threadsafe(
                 _edit_progress_message(bot, chat_id, status_message_id, text),
                 loop
@@ -86,10 +117,26 @@ async def _process_video_task_async(
         )
         
         sent_message = None
+        caption_suffix = format_line if format_line else None
         if existing_file_id:
-            sent_message = await send_video(bot, chat_id, video_path=None, url=url, file_id=existing_file_id, title=video_title)
+            sent_message = await _send_video_with_retry(
+                bot,
+                chat_id,
+                video_path=None,
+                url=url,
+                file_id=existing_file_id,
+                title=video_title,
+                caption_suffix=caption_suffix
+            )
         elif video_path:
-            sent_message = await send_video(bot, chat_id, video_path=video_path, url=url, title=video_title)
+            sent_message = await _send_video_with_retry(
+                bot,
+                chat_id,
+                video_path=video_path,
+                url=url,
+                title=video_title,
+                caption_suffix=caption_suffix
+            )
              
              # Cache the file_id if sending was successful
             if sent_message and sent_message.video:
@@ -140,6 +187,48 @@ async def _edit_progress_message(bot, chat_id: int, message_id: int, text: str) 
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode='HTML')
         except Exception:
             pass
+
+
+async def _send_video_with_retry(
+    bot,
+    chat_id: int,
+    video_path: str | None,
+    url: str | None,
+    title: str,
+    caption_suffix: str | None,
+    file_id: str | None = None,
+):
+    try:
+        return await send_video(
+            bot,
+            chat_id,
+            video_path=video_path,
+            url=url,
+            file_id=file_id,
+            title=title,
+            caption_suffix=caption_suffix,
+        )
+    except Exception as e:
+        err = str(e).lower()
+        if "internal server error during file upload" not in err:
+            raise
+        await asyncio.sleep(2)
+        return await send_video(
+            bot,
+            chat_id,
+            video_path=video_path,
+            url=url,
+            file_id=file_id,
+            title=title,
+            caption_suffix=caption_suffix,
+        )
+
+
+def _render_progress_bar(percent: int) -> str:
+    width = 12
+    pct = max(0, min(100, percent))
+    filled = int(width * pct / 100)
+    return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
 
 
 @celery_app.task(name='tasks.process_music_task')
