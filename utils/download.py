@@ -18,11 +18,10 @@ CACHE_TTL = 1800  # 30 minutes
 
 COMMON_OPTS = {
     'quiet': True,
-    'cookiefile': '/app/cookies.txt', # Fayl mavjudligini tekshiring
+    'cookiefile': '/app/cookies.txt',
     
     'force_ipv4': True, 
     'force_ipv6': False,
-    'remote_components': ['ejs:github'],
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
 
     'no_warnings': True,
@@ -32,19 +31,25 @@ COMMON_OPTS = {
     # Aria2c Configuration
     'external_downloader': 'aria2c',
     'external_downloader_args': [
-        '--max-connection-per-server=16', # Har bir serverga ulanishlar soni
-        '--split=16',                    # Faylni 16 bo'lakka bo'lib yuklash
-        '--min-split-size=1M',           # Minimal bo'lak hajmi
-        '--max-overall-download-limit=0',# Tezlikni cheklamaslik
-        '--file-allocation=none',        # Diskda joy band qilishni o'chirish (tezlatadi)
+        '--max-connection-per-server=16',
+        '--split=16',
+        '--min-split-size=1M',
+        '--max-overall-download-limit=0',
+        '--file-allocation=none',
+        # QUYIDAGI 3 TA QATORNI QO'SHING (Time out va ulanish xatolari uchun)
+        '--connect-timeout=60',          # Ulanishni uzoqroq kutish
+        '--timeout=60',                  # O'qish timeoutni oshirish
+        '--retry-wait=5',                # Xato bo'lsa 5 soniya kutib qayta urunish
+        '--stream-piece-selector=random',# YouTube cheklovidan qochish uchun bo'laklarni random tanlash
     ],
-    # RAM tejash uchun buffer o'lchami
-    'buffersize': 1024 * 16, # 16KB buffer
-    'http_chunk_size': 5242880, # 5MB chunk (RAM to'lib qolmasligi uchun)
-
-    'retries': 5,
-    'fragment_retries': 10,
-    'socket_timeout': 10,
+    
+    # HTTP sozlamalari
+    'buffersize': 1024 * 1024,   # 1MB buffer (8GB RAM-da bu juda xavfsiz va tezroq)
+    'http_chunk_size': 10485760, # 10MB chunk
+    
+    'retries': 10,               # Qayta urunishlar sonini oshirdik
+    'fragment_retries': 20,      # Fragment xatolarida ko'proq urunish
+    'socket_timeout': 30,        # 10 soniya juda kam, YouTube ba'zan kechikadi
 }
 
 def _map_download_error(err_msg: str, media_type: str) -> Exception:
