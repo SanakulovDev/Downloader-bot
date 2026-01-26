@@ -17,6 +17,23 @@ logger = logging.getLogger(__name__)
 CACHE_TTL = 1800  # 30 minutes
 YTDLP_DOWNLOAD_TIMEOUT = 900  # seconds
 
+class _YtDlpLogger:
+    def debug(self, msg):
+        pass
+
+    def info(self, msg):
+        pass
+
+    def warning(self, msg):
+        if "Requested format is not available" in str(msg):
+            return
+        logger.warning(msg)
+
+    def error(self, msg):
+        if "Requested format is not available" in str(msg):
+            return
+        logger.error(msg)
+
 COMMON_OPTS = {
     'quiet': False,
     'cookiefile': '/app/cookies.txt',
@@ -46,6 +63,12 @@ COMMON_OPTS = {
     'retries': 10, # Qayta urunishlar sonini oshirdik
     'fragment_retries': 20, # Fragment xatolarida ko'proq urunish
     'socket_timeout': 30, # 10 soniya juda kam, YouTube ba'zan kechikadi
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android', 'ios'],
+            'player_skip': ['configs', 'webpage'],
+        }
+    },
 
 }
 
@@ -143,6 +166,8 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
 
     ydl_opts = {
         **COMMON_OPTS,
+        'quiet': True,
+        'logger': _YtDlpLogger(),
         'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
     }
@@ -223,6 +248,8 @@ async def download_video(
 
         ydl_opts = {
             **COMMON_OPTS,
+            'quiet': True,
+            'logger': _YtDlpLogger(),
             'format': f"{format_selector}/best",
             'postprocessors': [{
                 'key': 'FFmpegVideoRemuxer',

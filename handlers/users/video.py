@@ -413,6 +413,15 @@ async def _fetch_video_info(url: str) -> dict | None:
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,
+            'noplaylist': True,
+            'socket_timeout': 10,
+            'retries': 2,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios'],
+                    'player_skip': ['configs', 'webpage'],
+                }
+            },
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             try:
@@ -433,6 +442,15 @@ async def _fetch_video_info(url: str) -> dict | None:
                 'quiet': True,
                 'no_warnings': True,
                 'ignoreerrors': True,
+                'noplaylist': True,
+                'socket_timeout': 10,
+                'retries': 2,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'ios'],
+                        'player_skip': ['configs', 'webpage'],
+                    }
+                },
             }
             if 'cookiefile' in fallback_opts:
                 del fallback_opts['cookiefile']

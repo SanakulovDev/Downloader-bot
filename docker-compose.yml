@@ -30,25 +30,7 @@ services:
         limits:
           memory: 400M
 
-  # admin_panel:
-  #   build: .
-  #   container_name: downloader_admin
-  #   restart: always
-  #   command: uvicorn admin_panel:app --host 0.0.0.0 --port 8000
-  #   volumes:
-  #     - .:/app
-  #     - /dev/shm:/dev/shm
-  #   env_file:
-  #     - ./app/.env
-  #   network_mode: "host"
-  #   depends_on:
-  #     - postgres
-  #   environment:
-  #     - DATABASE_URL=postgresql://postgres:postgres_pass@127.0.0.1:5432/downloader_db
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 300M
+
 
   downloader-bot:
     build: .
