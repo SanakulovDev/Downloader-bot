@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 CACHE_TTL = 1800  # 30 minutes
 
 COMMON_OPTS = {
-    'quiet': True,
+    'quiet': False,
     'cookiefile': '/app/cookies.txt',
     
     'force_ipv4': True, 
@@ -25,7 +25,7 @@ COMMON_OPTS = {
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
 
     'no_warnings': True,
-    'ignoreerrors': True,
+    'ignoreerrors': False,
     'nocheckcertificate': True,
     
     # Aria2c Configuration
