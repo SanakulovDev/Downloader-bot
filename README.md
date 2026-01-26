@@ -1,61 +1,36 @@
 # 🤖 Universal Media Downloader Bot
 
+**InstaAudioBot** — bu Telegram orqali YouTube, Instagram va YouTube Music platformalaridan video va audio yuklab olish uchun yaratilgan kuchli va zamonaviy bot. Loyiha yuqori tezlik va barqarorlikni ta'minlash uchun **Docker**, **Redis**, **Celery** va **yt-dlp** texnologiyalaridan foydalanadi.
+
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Aiogram](https://img.shields.io/badge/Aiogram-3.x-blueviolet.svg?logo=telegram)](https://docs.aiogram.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-
-**Universal Media Downloader** — bu Telegram orqali YouTube, Instagram va YouTube Music platformalaridan video va audio yuklab olish uchun yaratilgan yuqori tezlikdagi va zamonaviy bot. Loyiha eng so'nggi texnologiyalar (Asyncio, Redis, Celery) asosida qurilgan bo'lib, yuqori yuklamalarda ham barqaror ishlashga mo'ljallangan.
 
 ---
 
 ## 🔥 Asosiy Imkoniyatlar
 
 ### 📹 YouTube
-
-- **Video yuklash**: Yuqori sifatli (1080p, 4K gacha) videolarni yuklash.
-- **Audio ajratish**: Videodan faqat audio (MP3) trekni ajratib olish.
-- **Playlistlar**: Butun playlistni bittada yuklash imkoniyati (kelajakda).
-- **Tezlik**: `aria2c` multi-connection orqali maksimal tezlik.
+- **Video Sifatini Tanlash**: 144p dan 4K gacha bo'lgan sifatlarda yuklash (Progressive va DASH formatlarni qo'llab-quvvatlaydi).
+- **Tezkor Format Aniqlash**: Videoning mavjud formatlarini soniyalar ichida aniqlash.
+- **Audio Ajratish**: Videolarni audio formatda (M4A/MP3) yuklab olish.
+- **Katta Fayllar**: 2GB gacha bo'lgan fayllarni muammosiz yuborish.
 
 ### 📸 Instagram
+- **Universal Yuklash**: Reels, Postlar (rasm va video), Stories va IGTV.
+- **Carousel Qo'llab-quvvatlash**: Bir nechta rasm/videodan iborat postlarni to'liq yuklash.
+- **Login Talab Qilinmaydi**: Ko'p hollarda akkauntga kirish shart emas.
 
-- **Barcha turdagi kontent**: Reels, Posts, Stories va IGTV.
-- **No-Login**: Instagram akkauntga kirish talab qilinmaydi (ba'zi hollarda).
-- **Carousel**: Ko'p rasmli postlarni to'liq yuklash.
-
-### 🎵 YouTube Music
-
-- **Qidiruv**: Qo'shiq nomi yoki ijrochi bo'yicha qidirish.
-- **Lyrics va Metadata**: Albom rasmi, ijrochi va qo'shiq nomi bilan to'liq fayl.
-- **Yuqori Sifat**: 320kbps gacha audio sifati.
-
-### 🚀 Texnik Ustunliklar
-
-- **Redis Cache**: So'rovlarni keshlash orqali qayta yuklashlarni 10x kamaytirish.
-- **Admin Panel**: Foydalanuvchilar statistikasi va bot boshqaruvi.
-- **Background Tasks**: Celery va RabbitMQ yordamida og'ir vazifalarni fonda bajarish.
-- **Dockerized**: To'liq Docker containerlarda ishlashga tayyor.
-
----
-
-## 🛠 Texnologiyalar Stacki
-
-- **Core**: Python 3.11, [Aiogram 3](https://docs.aiogram.dev/)
-- **Downloaders**: [yt-dlp](https://github.com/yt-dlp/yt-dlp), [Instaloader](https://instaloader.github.io/)
-- **Music API**: [ytmusicapi](https://github.com/sigma67/ytmusicapi), [ShazamIO](https://github.com/shazamio/shazamio)
-- **Database**: PostgreSQL (SQLAlchemy + AsyncPG)
-- **Cache & Broker**: Redis, RabbitMQ
-- **Task Queue**: Celery
+### 🎵 YouTube Music & Shazam
+- **Musiqa Qidiruv**: Nom yoki ijrochi bo'yicha qidirish.
+- **To'liq Metadata**: Albom rasmi (cover), ijrochi va qo'shiq nomi bilan yuklash.
+- **Shazam Integratsiyasi**: Ovozli xabar yoki videodan musiqa aniqlash (ShazamIO).
 
 ---
 
 ## 🚀 O'rnatish va Ishga Tushirish
 
-### Talablar
-
-- Docker va Docker Compose
-- Telegram Bot Token ([BotFather](https://t.me/BotFather))
+Loyihani ishga tushirish uchun serveringizda **Docker** va **Docker Compose** o'rnatilgan bo'lishi kerak.
 
 ### 1. Loyihani yuklab olish
 
@@ -64,103 +39,89 @@ git clone https://github.com/username/downloader-bot.git
 cd downloader-bot
 ```
 
-### 2. Konfiguratsiya
+### 2. Sozlamalar (.env)
 
-`app/.env.example` namunasidan nusxa olib, `.env` faylini yarating va sozlab chiqing:
+`env.example` namunasidan `.env` faylini yarating:
 
 ```bash
-cp app/.env.example app/.env
-nano app/.env
+cp .env.example .env
+nano .env
 ```
 
-**Muhim o'zgaruvchilar (.env):**
+Quyidagi o'zgaruvchilarni to'ldiring:
 
 ```env
-BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-ADMINS=123456789,987654321
+BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11  # @BotFather dan olingan token
+ADMINS=12345678,87654321                             # Admin ID lari (vergul bilan)
 DB_USER=postgres
-DB_PASS=postgres_pass
-DB_NAME=downloader_db
+DB_PASS=parol
+DB_NAME=insta_bot_db
 DB_HOST=postgres
 REDIS_HOST=redis
 ```
 
-### 3. Docker orqali ishga tushirish (Tavsiya etiladi)
+### 3. Cookies (Youtube va Instagram uchun)
 
-Loyihani to'liq (DB, Redis, Workerlar bilan) ishga tushirish uchun:
+Youtube va Instagram cheklovlaridan qochish uchun `cookies.txt` faylidan foydalanish tavsiya etiladi:
+1. Brauzeringizdan (Chrome/Firefox) YouTube yoki Instagramga kiring.
+2. "Get cookies.txt LOCALLY" (yoki shunga o'xshash) kengaytma orqali cookie faylni yuklab oling.
+3. Faylni loyiha papkasiga `cookies.txt` nomi bilan joylashtiring.
+
+---
+
+## 🐳 Docker Orqali Ishga Tushirish (Tavsiya etiladi)
+
+Barcha xizmatlarni (Bot, Database, Redis) bitta buyruq bilan ishga tushiring:
 
 ```bash
 docker-compose up -d --build
 ```
 
-Loglarni kuzatish:
+Loglarni kuzatish uchun:
 
 ```bash
 docker-compose logs -f
 ```
 
----
-
-## 🖥 Lokal Ishga Tushirish (Development)
-
-Agar Docker ishlatmasdan, to'g'ridan-to'g'ri Python orqali ishlatmoqchi bo'lsangiz:
-
-1. **Virtual muhit yaratish:**
-
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-
-2. **Kutubxonalarni o'rnatish:**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Xizmatlarni ishga tushirish:**
-   Sizga lokal Redis va PostgreSQL kerak bo'ladi. Ular ishga tushgach, `.env` faylida `localhost` deb ko'rsating.
-
-4. **Botni ishga tushirish:**
-   ```bash
-   python bot.py
-   ```
-
----
-
-## 📁 Loyiha Tuzilishi
-
-```
-📂 downloader-bot
-├── 📂 app/              # Konfiguratsiya fayllari
-├── 📂 core/             # Asosiy sozlamalar (config, db)
-├── 📂 downloads/        # Vaqtinchalik yuklangan fayllar
-├── 📂 handlers/         # Telegram handlerlar (users, admins)
-├── 📂 keyboards/        # Tugmalar (inline, reply)
-├── 📂 services/         # Tashqi servislar (Youtube, Insta)
-├── 📂 tasks/            # Celery vazifalari
-├── 📂 utils/            # Yordamchi funksiyalar
-├── 📄 bot.py            # Asosiy kirish nuqtasi
-├── 📄 docker-compose.yml
-└── 📄 requirements.txt
+Botni to'xtatish uchun:
+```bash
+docker-compose down
 ```
 
 ---
 
-## ❓ Muammolar va Yechimlar
+## 🛠 Texnologik Stack
 
-**Q: Bot video yuklamayapti?**
-J: Serveringiz IP manzili YouTube yoki Instagram tomonidan bloklangan bo'lishi mumkin. Proxy ishlatishni ko'rib chiqing.
-
-**Q: Dockerda xatolik: "No space left on device"?**
-J: `docker system prune -a` buyrug'i orqali eski container va imagelarni tozalang.
+- **Til**: Python 3.11
+- **Framework**: Aiogram 3 (Asynchronous Telegram Bot API)
+- **Database**: PostgreSQL + SQLAlchemy (Async)
+- **Cache**: Redis (Foydalanuvchi holati va tezkor kesh uchun)
+- **Media Engine**: 
+  - `yt-dlp` (YouTube va umumiy platformalar uchun eng kuchli vosita)
+  - `ffmpeg` (Video va audioni birlashtirish, format o'zgartirish uchun)
+- **Infrastructure**: Docker & Docker Compose
 
 ---
 
-## 🤝 Hissa Qo'shish (Contributing)
+## ❓ Ko'p So'raladigan Savollar (FAQ)
 
-Loyihani rivojlantirishga hissa qo'shmoqchi bo'lsangiz, Pull Request yuborishingiz mumkin. Xatolik topgan bo'lsangiz, Issue oching.
+**Savol: Bot "Fayl juda katta" deyapti?**
+Javob: Telegram bot API orqali 50MB, Local Bot API server orqali 2GB gacha fayl yuborish mumkin. Bu loyiha Local Server bilan ishlashga ham moslashgan (agar serveringizda sozlangan bo'lsa).
+
+**Savol: YouTube tezligi past?**
+Javob: YouTube ba'zi server IP larini cheklashi mumkin. `cookies.txt` ni yangilang yoki IPv6 ni o'chirib ko'ring (Docker network sozlamalarida).
+
+**Savol: Instagram Stories yuklamayapti?**
+Javob: Stories faqat login qilingan (cookies bor) holatda ishlaydi. `cookies.txt` faylingiz to'g'riligiga ishonch hosil qiling.
+
+---
+
+## 🤝 Hissa Qo'shish
+
+Loyiha ochiq kodli (Open Source). Taklif va, xatoliklar bo'lsa **Issues** bo'limiga yozing yoki **Pull Request** yuboring.
+
+---
 
 ## 📄 Litsenziya
 
-Bu loyiha MIT litsenziyasi asosida tarqatiladi.
+MIT License. Isstalgan maqsadda foydalanishingiz mumkin.
