@@ -34,9 +34,11 @@ class _YtDlpLogger:
             return
         logger.error(msg)
 
+_COOKIE_FILE = os.getenv("YTDLP_COOKIE_FILE")
+
 COMMON_OPTS = {
     'quiet': False,
-    'cookiefile': '/app/cookies.txt',
+    **({'cookiefile': _COOKIE_FILE} if _COOKIE_FILE else {}),
     'force_ipv4': True,
     'force_ipv6': False,
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -63,14 +65,397 @@ COMMON_OPTS = {
     'retries': 10, # Qayta urunishlar sonini oshirdik
     'fragment_retries': 20, # Fragment xatolarida ko'proq urunish
     'socket_timeout': 30, # 10 soniya juda kam, YouTube ba'zan kechikadi
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['android', 'ios'],
-            'player_skip': ['configs', 'webpage'],
-        }
-    },
 
 }
+
+TARGET_HEIGHTS = {144, 240, 360, 480, 720, 1080, 1440, 2160}
+MAX_FORMAT_SIZE_BYTES = 900 * 1024 * 1024  # 900MB
+VIDEO_CODEC_PRIORITY = {
+    "av01": 3,
+    "vp9": 2,
+    "avc1": 1,
+}
+
+
+def _video_codec_rank(vcodec: str | None) -> int:
+    if not vcodec:
+        return 0
+    for prefix, rank in VIDEO_CODEC_PRIORITY.items():
+        if vcodec.startswith(prefix):
+            return rank
+    return 0
+
+
+def _estimate_format_size_bytes(fmt: dict, duration: int | None) -> int | None:
+    size = fmt.get("filesize") or fmt.get("filesize_approx")
+    if size:
+        return int(size)
+    tbr = fmt.get("tbr")  # kbps
+    if tbr and duration:
+        return int(tbr * 1000 / 8 * duration)
+    return None
+
+
+def _is_storyboard(fmt: dict) -> bool:
+    return fmt.get("ext") == "mhtml" or (fmt.get("format_id") or "").startswith("sb")
+
+
+def _pick_better_format(current: dict | None, candidate: dict) -> dict:
+    if not current:
+        return candidate
+    current_rank = _video_codec_rank(current.get("vcodec"))
+    candidate_rank = _video_codec_rank(candidate.get("vcodec"))
+    if candidate_rank != current_rank:
+        return candidate if candidate_rank > current_rank else current
+    if (candidate.get("tbr") or 0) > (current.get("tbr") or 0):
+        return candidate
+    return current
+
+
+def _select_best_formats(info: dict) -> list[dict]:
+    formats = info.get("formats") or []
+    duration = info.get("duration")
+    best_progressive: dict[int, dict] = {}
+    best_dash: dict[int, dict] = {}
+
+    for fmt in formats:
+        height = fmt.get("height")
+        if not height or height not in TARGET_HEIGHTS:
+            continue
+        if _is_storyboard(fmt):
+            continue
+
+        vcodec = fmt.get("vcodec")
+        if not vcodec or vcodec == "none":
+            continue
+
+        size = _estimate_format_size_bytes(fmt, duration)
+        if size and size > MAX_FORMAT_SIZE_BYTES:
+            continue
+
+        acodec = fmt.get("acodec")
+        has_audio = acodec and acodec != "none"
+        if has_audio:
+            best_progressive[height] = _pick_better_format(best_progressive.get(height), fmt)
+        else:
+            best_dash[height] = _pick_better_format(best_dash.get(height), fmt)
+
+    items: list[dict] = []
+    for height in sorted(TARGET_HEIGHTS):
+        fmt = best_progressive.get(height) or best_dash.get(height)
+        if not fmt:
+            continue
+        size_bytes = _estimate_format_size_bytes(fmt, duration) or 0
+        is_merge = 0 if (fmt.get("acodec") and fmt.get("acodec") != "none") else 1
+        note = "progressive" if is_merge == 0 else "dash_video_only_merge_audio"
+        ext = fmt.get("ext") or "mp4"
+        items.append({
+            "height": height,
+            "format_id": fmt.get("format_id"),
+            "is_merge": is_merge,
+            "ext": ext,
+            "size_bytes": size_bytes,
+            "size_mb_est": round(size_bytes / (1024 * 1024), 1) if size_bytes else 0.0,
+            "note": note,
+        })
+
+    if not items:
+        for fmt in formats:
+            if fmt.get("format_id") == "18":
+                size_bytes = _estimate_format_size_bytes(fmt, duration) or 0
+                items.append({
+                    "height": 360,
+                    "format_id": "18",
+                    "is_merge": 0,
+                    "ext": fmt.get("ext") or "mp4",
+                    "size_bytes": size_bytes,
+                    "size_mb_est": round(size_bytes / (1024 * 1024), 1) if size_bytes else 0.0,
+                    "note": "progressive",
+                })
+                break
+
+    return items
+
+
+def _yt_info_opts(include_manifests: bool, extractor_args: dict | None = None) -> dict:
+    user_agent = COMMON_OPTS.get("user_agent") or COMMON_OPTS.get("user-agent")
+    return {
+        'quiet': True,
+        'no_warnings': True,
+        'ignoreerrors': True,
+        'skip_download': True,
+        'noplaylist': True,
+        'socket_timeout': 10,
+        'retries': 2,
+        'extractor_retries': 2,
+        'youtube_include_dash_manifest': include_manifests,
+        'youtube_include_hls_manifest': include_manifests,
+        'user_agent': user_agent,
+        'http_headers': {
+            'User-Agent': user_agent,
+        },
+        'extractor_args': extractor_args or {},
+    }
+
+
+def _extract_info_fast(url: str, opts: dict) -> dict | None:
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=False)
+
+
+async def fetch_youtube_formats_fast(url: str) -> dict | None:
+    """
+    Fast YouTube format detection with yt-dlp metadata only.
+    Returns schema:
+    {
+      "id": "", "title": "", "uploader": "", "thumbnail": "", "duration": 0,
+      "items": [ ... ]
+    }
+    """
+    info = None
+    try:
+        fast_opts = _yt_info_opts(include_manifests=False)
+        info = await asyncio.wait_for(
+            asyncio.to_thread(_extract_info_fast, url, fast_opts),
+            timeout=15
+        )
+    except yt_dlp.utils.DownloadError as e:
+        err = str(e).lower()
+        if "403" not in err and "forbidden" not in err:
+            info = None
+    except Exception:
+        info = None
+
+    if not info or not info.get("formats"):
+        try:
+            fallback_opts = _yt_info_opts(
+                include_manifests=True,
+                extractor_args={
+                    "youtube": {
+                        "player_client": ["android", "web"],
+                    }
+                }
+            )
+            info = await asyncio.wait_for(
+                asyncio.to_thread(_extract_info_fast, url, fallback_opts),
+                timeout=20
+            )
+        except Exception:
+            info = None
+
+    if not info:
+        return None
+
+    items = _select_best_formats(info)
+    return {
+        "id": info.get("id"),
+        "title": info.get("title"),
+        "uploader": info.get("uploader"),
+        "thumbnail": info.get("thumbnail"),
+        "duration": info.get("duration") or 0,
+        "items": items,
+    }
+
+
+# --- YOUTUBE CONFIG & HELPERS ---
+TARGET_HEIGHTS = {144, 240, 360, 480, 720, 1080, 1440, 2160}
+MAX_FORMAT_SIZE_BYTES = 900 * 1024 * 1024  # 900MB
+VIDEO_CODEC_PRIORITY = {
+    "av01": 3,
+    "vp9": 2,
+    "avc1": 1,
+}
+
+def _video_codec_rank(vcodec: str | None) -> int:
+    if not vcodec:
+        return 0
+    for prefix, rank in VIDEO_CODEC_PRIORITY.items():
+        if vcodec.startswith(prefix):
+            return rank
+    return 0
+
+def _estimate_format_size_bytes(fmt: dict, duration: int | None) -> int | None:
+    size = fmt.get("filesize") or fmt.get("filesize_approx")
+    if size:
+        return int(size)
+    tbr = fmt.get("tbr")  # kbps
+    if tbr and duration:
+        return int(tbr * 1000 / 8 * duration)
+    return None
+
+def _is_storyboard(fmt: dict) -> bool:
+    return fmt.get("ext") == "mhtml" or (fmt.get("format_id") or "").startswith("sb")
+
+def _pick_better_format(current: dict | None, candidate: dict) -> dict:
+    if not current:
+        return candidate
+    current_rank = _video_codec_rank(current.get("vcodec"))
+    candidate_rank = _video_codec_rank(candidate.get("vcodec"))
+    if candidate_rank != current_rank:
+        return candidate if candidate_rank > current_rank else current
+    if (candidate.get("tbr") or 0) > (current.get("tbr") or 0):
+        return candidate
+    return current
+
+def _select_best_formats(info: dict) -> list[dict]:
+    formats = info.get("formats") or []
+    duration = info.get("duration")
+    best_progressive: dict[int, dict] = {}
+    best_dash: dict[int, dict] = {}
+
+    for fmt in formats:
+        height = fmt.get("height")
+        if not height or height not in TARGET_HEIGHTS:
+            continue
+        if _is_storyboard(fmt):
+            continue
+
+        vcodec = fmt.get("vcodec")
+        if not vcodec or vcodec == "none":
+            continue
+
+        size = _estimate_format_size_bytes(fmt, duration)
+        if size and size > MAX_FORMAT_SIZE_BYTES:
+            continue
+
+        acodec = fmt.get("acodec")
+        has_audio = acodec and acodec != "none"
+        if has_audio:
+            best_progressive[height] = _pick_better_format(best_progressive.get(height), fmt)
+        else:
+            best_dash[height] = _pick_better_format(best_dash.get(height), fmt)
+
+    items: list[dict] = []
+    for height in sorted(TARGET_HEIGHTS):
+        prog = best_progressive.get(height)
+        dash = best_dash.get(height)
+        
+        # Priority: Progressive > DASH (if prog exists)
+        # Requirement: "If progressive... prefer this".
+        # Note: If high quality is only DASH, we take DASH.
+        # But if 360p is both, we take Progressive.
+        
+        final_fmt = None
+        is_merge = 0
+        note = ""
+
+        if prog:
+            final_fmt = prog
+            is_merge = 0
+            note = "progressive"
+        elif dash:
+            final_fmt = dash
+            is_merge = 1
+            note = "dash_video_only_merge_audio"
+        
+        if not final_fmt:
+            continue
+
+        size_bytes = _estimate_format_size_bytes(final_fmt, duration) or 0
+        ext = final_fmt.get("ext") or "mp4"
+        items.append({
+            "height": height,
+            "format_id": final_fmt.get("format_id"),
+            "is_merge": is_merge,
+            "ext": ext,
+            "size_bytes": size_bytes,
+            "size_mb_est": round(size_bytes / (1024 * 1024), 1) if size_bytes else 0.0,
+            "note": note,
+        })
+
+    if not items:
+        # Fallback 18
+        for fmt in formats:
+            if fmt.get("format_id") == "18":
+                size_bytes = _estimate_format_size_bytes(fmt, duration) or 0
+                items.append({
+                    "height": 360,
+                    "format_id": "18",
+                    "is_merge": 0,
+                    "ext": fmt.get("ext") or "mp4",
+                    "size_bytes": size_bytes,
+                    "size_mb_est": round(size_bytes / (1024 * 1024), 1) if size_bytes else 0.0,
+                    "note": "progressive",
+                })
+                break
+    return items
+
+def _yt_info_opts(include_manifests: bool, extractor_args: dict | None = None) -> dict:
+    user_agent = COMMON_OPTS.get("user_agent")
+    return {
+        'quiet': True,
+        'no_warnings': True,
+        'ignoreerrors': True,
+        'skip_download': True,
+        'noplaylist': True,
+        'socket_timeout': 10,
+        'retries': 2,
+        'extractor_retries': 2,
+        'youtube_include_dash_manifest': include_manifests,
+        'youtube_include_hls_manifest': include_manifests,
+        'user_agent': user_agent,
+        'http_headers': {
+            'User-Agent': user_agent,
+        },
+        'extractor_args': extractor_args or {},
+    }
+
+def _extract_info_fast(url: str, opts: dict) -> dict | None:
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=False)
+    except Exception:
+        return None
+
+async def fetch_youtube_formats_fast(url: str) -> dict | None:
+    """
+    Fast YouTube format detection with yt-dlp metadata only.
+    """
+    info = None
+    try:
+        fast_opts = _yt_info_opts(include_manifests=False)
+        info = await asyncio.wait_for(
+            asyncio.to_thread(_extract_info_fast, url, fast_opts),
+            timeout=15
+        )
+    except Exception:
+        pass
+
+    if not info or not info.get("formats"):
+        try:
+            fallback_opts = _yt_info_opts(
+                include_manifests=True,
+                extractor_args={
+                    "youtube": {
+                        "player_client": ["android", "web"],
+                    }
+                }
+            )
+            info = await asyncio.wait_for(
+                asyncio.to_thread(_extract_info_fast, url, fallback_opts),
+                timeout=20
+            )
+        except Exception:
+            pass
+
+    if not info:
+        return None
+
+    items = _select_best_formats(info)
+    return {
+        "id": info.get("id"),
+        "title": info.get("title"),
+        "uploader": info.get("uploader"),
+        "thumbnail": info.get("thumbnail"),
+        "duration": info.get("duration") or 0,
+        "items": items,
+    }
+
+def get_format_selector(format_id: str, is_merge: int) -> str:
+    if str(is_merge) == "1":
+        return f"{format_id}+bestaudio[ext=m4a][acodec!=none]/bestaudio[acodec!=none]/bestaudio"
+    else:
+        return format_id
 
 async def _path_exists(path: Union[str, os.PathLike]) -> bool:
     return await asyncio.to_thread(os.path.exists, path)
@@ -250,7 +635,7 @@ async def download_video(
             **COMMON_OPTS,
             'quiet': True,
             'logger': _YtDlpLogger(),
-            'format': f"{format_selector}/best",
+            'format': format_selector,
             'postprocessors': [{
                 'key': 'FFmpegVideoRemuxer',
                 'preferedformat': merge_ext,
@@ -279,6 +664,24 @@ async def download_video(
             raise Exception("❌ Yuklash vaqti tugadi. Keyinroq urinib ko'ring.")
         except yt_dlp.utils.DownloadError as e:
             err_msg = str(e).lower()
+            if "aria2c exited with code" in err_msg:
+                logger.warning("aria2c failed, retrying with internal downloader")
+                no_aria_opts = {**ydl_opts}
+                no_aria_opts.pop("external_downloader", None)
+                no_aria_opts.pop("external_downloader_args", None)
+                try:
+                    with yt_dlp.YoutubeDL(no_aria_opts) as ydl:
+                        info_dict = await asyncio.wait_for(
+                            asyncio.to_thread(ydl.extract_info, url, download=True),
+                            timeout=YTDLP_DOWNLOAD_TIMEOUT
+                        )
+                        if info_dict:
+                            video_title = info_dict.get('title', 'Video')
+                    err_msg = ""
+                except asyncio.TimeoutError:
+                    raise Exception("❌ Yuklash vaqti tugadi. Keyinroq urinib ko'ring.")
+                except yt_dlp.utils.DownloadError as e_noaria:
+                    err_msg = str(e_noaria).lower()
             if "requested format is not available" in err_msg:
                 try:
                     # 1. Fallback: Request qilingan formatni cookiesiz urinib ko'rish
@@ -286,6 +689,8 @@ async def download_video(
                     fallback_opts_1 = {**ydl_opts}
                     if 'cookiefile' in fallback_opts_1:
                         del fallback_opts_1['cookiefile']
+                    fallback_opts_1.pop("external_downloader", None)
+                    fallback_opts_1.pop("external_downloader_args", None)
                     
                     with yt_dlp.YoutubeDL(fallback_opts_1) as ydl:
                         info_dict = await asyncio.wait_for(
@@ -301,9 +706,11 @@ async def download_video(
                      # 2. Fallback: Agar o'xshamasa, 'best' formatni cookiesiz urinib ko'rish
                     logger.warning(f"Original format retry failed: {e_opt}. Trying 'best' format...")
                     
-                    fallback_opts_2 = {**ydl_opts, 'format': 'best'}
+                    fallback_opts_2 = {**ydl_opts, 'format': 'bestvideo*+bestaudio/best'}
                     if 'cookiefile' in fallback_opts_2:
                         del fallback_opts_2['cookiefile']
+                    fallback_opts_2.pop("external_downloader", None)
+                    fallback_opts_2.pop("external_downloader_args", None)
                     
                     try:
                         with yt_dlp.YoutubeDL(fallback_opts_2) as ydl:

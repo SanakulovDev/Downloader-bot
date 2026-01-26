@@ -14,7 +14,7 @@ from keyboards.default_keyboards import main_menu
 from utils.validation import is_youtube_url, is_instagram_url, extract_url, extract_youtube_id
 from tasks.bot_tasks import process_video_task
 from utils.search import search_music
-from utils.download import COMMON_OPTS
+from utils.download import fetch_youtube_formats_fast, get_format_selector
 from utils.telegram_helpers import safe_delete_message, safe_edit_text, check_text_length_and_notify
 from utils.i18n import get_user_lang, t
 
@@ -238,94 +238,8 @@ async def handle_video_logic(message: Message, url: str):
     )
 
 
-def _estimate_size_bytes(fmt: dict, duration: int | None) -> int | None:
-    size = fmt.get("filesize") or fmt.get("filesize_approx")
-    if size:
-        return int(size)
-    tbr = fmt.get("tbr")  # kbps
-    if tbr and duration:
-        return int(tbr * 1000 / 8 * duration)
-    return None
-
-
 def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMarkup | None]:
-    formats = info.get("formats") or []
-    duration = info.get("duration")
-    max_size = 900 * 1024 * 1024 # 900MB (Foydalanuvchi talabi)
-    
-    # Bizga kerakli sifatlar ro'yxati
-    target_heights = {144, 240, 360, 480, 720, 1080, 1440, 2160}
-    best_formats = {} # {height: format_dict}
-
-    for fmt in formats:
-        height = fmt.get("height")
-        if not height or height not in target_heights:
-            continue
-            
-        # Faqat videosiz formatlarni tashlab ketamiz (storyboard, audio-only)
-        vcodec = fmt.get("vcodec")
-        if not vcodec or vcodec == "none":
-            continue
-            
-        # Storyboard formatlarni tashlab ketamiz
-        if fmt.get("ext") == "mhtml":
-            continue
-
-        # Hajmni tekshirish (o'lchami kattalarni oldindan chiqarib tashlaymiz)
-        size = _estimate_size_bytes(fmt, duration)
-        if size and size > max_size:
-            continue
-
-        # Har bir sifat uchun eng yaxshisini tanlaymiz
-        current_best = best_formats.get(height)
-        if not current_best:
-            best_formats[height] = fmt
-        else:
-            # Birinchi, progressive formatni (audio+video) afzal ko'ramiz
-            current_has_audio = current_best.get("acodec") and current_best.get("acodec") != "none"
-            new_has_audio = fmt.get("acodec") and fmt.get("acodec") != "none"
-            
-            if new_has_audio and not current_has_audio:
-                best_formats[height] = fmt
-            elif new_has_audio == current_has_audio:
-                # Agar ikkala format ham bir xil (yoki ikkalasi ham DASH), MP4 ni afzal ko'ramiz
-                if fmt.get("ext") == "mp4" and current_best.get("ext") != "mp4":
-                    best_formats[height] = fmt
-                elif fmt.get("ext") == current_best.get("ext"):
-                    # Bir xil format bo'lsa, bitrate yaxshirogini tanlaymiz
-                    if fmt.get("tbr", 0) > current_best.get("tbr", 0):
-                        best_formats[height] = fmt
-
-    items = []
-    for height in sorted(best_formats.keys()):
-        fmt = best_formats[height]
-        format_id = fmt.get("format_id")
-        
-        # AGAR formatda audio bo'lmasa (DASH video), audio qo'shamiz
-        # yt-dlp avtomatik FFmpeg orqali birlashtirib beradi
-        acodec = fmt.get("acodec")
-        if not acodec or acodec == "none":
-            # DASH video (merge required) -> '1'
-            is_merge = "1"
-        else:
-            # Progressive (direct) -> '0'
-            is_merge = "0"
-
-        size = _estimate_size_bytes(fmt, duration)
-        ext = fmt.get("ext", "mp4")
-        # Selector o'rniga format_id va is_merge ni saqlaymiz
-        items.append((height, format_id, is_merge, size, ext))
-
-    # Agar hech narsa topilmasa, fallback sifatida format 18 ni ishlatamiz
-    if not items:
-        logger.warning("No formats found with target heights, trying fallback format 18")
-        for fmt in formats:
-            if fmt.get('format_id') == '18':
-                logger.info("Using fallback format 18 (360p progressive)")
-                # Fallback: 18 format (progressive -> is_merge='0')
-                items.append((360, "18", "0", _estimate_size_bytes(fmt, duration), "mp4"))
-                break
-    
+    items = info.get("items") or []
     if not items:
         logger.error("No suitable formats found at all")
         return "", None
@@ -334,10 +248,15 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     buttons = []
     row = []
     
-    for height, format_id, is_merge, size, ext in items:
+    for item in items:
+        height = item.get("height")
+        format_id = item.get("format_id")
+        is_merge = str(item.get("is_merge", 0))
+        size_bytes = item.get("size_bytes") or 0
+        ext = item.get("ext") or "mp4"
         size_mb = "?"
-        if size:
-            size_mb = t("size_mb", lang, mb=round(size / (1024 * 1024)))
+        if size_bytes:
+            size_mb = t("size_mb", lang, mb=round(size_bytes / (1024 * 1024), 1))
         
         format_lines.append(t("format_line", lang, height=height, size=size_mb))
 
@@ -371,28 +290,6 @@ def _build_format_message(info: dict, lang: str) -> tuple[str, InlineKeyboardMar
     )
     return caption, InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def _compact_info(info: dict) -> dict:
-    formats = []
-    for fmt in info.get("formats") or []:
-        formats.append({
-            "format_id": fmt.get("format_id"),
-            "height": fmt.get("height"),
-            "ext": fmt.get("ext"),
-            "vcodec": fmt.get("vcodec"),
-            "acodec": fmt.get("acodec"),
-            "tbr": fmt.get("tbr"),
-            "filesize": fmt.get("filesize"),
-            "filesize_approx": fmt.get("filesize_approx"),
-        })
-    return {
-        "id": info.get("id"),
-        "title": info.get("title"),
-        "uploader": info.get("uploader"),
-        "duration": info.get("duration"),
-        "thumbnail": info.get("thumbnail"),
-        "formats": formats,
-    }
-
 async def _fetch_video_info(url: str) -> dict | None:
     from loader import redis_client
     url_key = None
@@ -403,72 +300,23 @@ async def _fetch_video_info(url: str) -> dict | None:
             cached = await redis_client.get(url_key)
             if cached:
                 import json
-                return json.loads(cached)
+                cached_info = json.loads(cached)
+                if cached_info and cached_info.get("items"):
+                    return cached_info
         except Exception:
             pass
-    def _extract(opts=None) -> dict | None:
-        opts = opts or {
-            **COMMON_OPTS,
-            'skip_download': True,
-            'quiet': True,
-            'no_warnings': True,
-            'ignoreerrors': True,
-            'noplaylist': True,
-            'socket_timeout': 10,
-            'retries': 2,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'ios'],
-                    'player_skip': ['configs', 'webpage'],
-                }
-            },
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            try:
-                return ydl.extract_info(url, download=False)
-            except Exception:
-                return None
 
     try:
-        # 1-urinish
-        info = await asyncio.wait_for(asyncio.to_thread(_extract), timeout=YTDLP_INFO_TIMEOUT)
-        
-        # Agar o'xshamasa (formatsiz qaytsa yoki None bo'lsa)
-        if not info:
-             # Cookiesiz urinib ko'ramiz
-            fallback_opts = {
-                **COMMON_OPTS,
-                'skip_download': True,
-                'quiet': True,
-                'no_warnings': True,
-                'ignoreerrors': True,
-                'noplaylist': True,
-                'socket_timeout': 10,
-                'retries': 2,
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android', 'ios'],
-                        'player_skip': ['configs', 'webpage'],
-                    }
-                },
-            }
-            if 'cookiefile' in fallback_opts:
-                del fallback_opts['cookiefile']
-            
-            info = await asyncio.wait_for(
-                asyncio.to_thread(_extract, fallback_opts),
-                timeout=YTDLP_INFO_TIMEOUT
-            )
+        info = await asyncio.wait_for(fetch_youtube_formats_fast(url), timeout=YTDLP_INFO_TIMEOUT)
 
         if info and redis_client and url_key:
             try:
                 import json
-                compact = _compact_info(info)
-                await redis_client.setex(url_key, 300, json.dumps(compact))
+                await redis_client.setex(url_key, 300, json.dumps(info))
             except Exception:
                 pass
         if info:
-            return _compact_info(info)
+            return info
         return None
     except asyncio.TimeoutError:
         return None
@@ -542,11 +390,7 @@ async def handle_video_format(callback: CallbackQuery):
     is_merge = data[3]
     output_ext = data[4]
     
-    if is_merge == "1":
-        # Reconstruct standard merge selector
-        format_selector = f"{format_id}+bestaudio[ext=m4a]/bestaudio/best"
-    else:
-        format_selector = format_id
+    format_selector = get_format_selector(format_id, is_merge)
     from loader import redis_client
     lang = await get_user_lang(callback.from_user.id, redis_client)
 
