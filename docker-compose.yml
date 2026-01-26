@@ -1,33 +1,155 @@
 version: '3.8'
+
 services:
   redis:
     image: redis:7-alpine
     container_name: downloader_redis
     restart: always
+    volumes:
+      - ./redis_data_dir:/data
+    # RAM kamligi uchun maxmemoryni 300MB ga tushiramiz. 
+    # Hash Map va TTL ishlatganingiz uchun bu millionlab userga ham yetadi.
     command: redis-server --appendonly yes --maxmemory 300mb --maxmemory-policy allkeys-lru
-    network_mode: "host" # Contabo ulanishi uchun 6379 porti ochiq bo'lishi kerak
+    network_mode: "host" 
+    deploy:
+      resources:
+        limits:
+          memory: 400M
 
   postgres:
     image: postgres:15-alpine
     container_name: downloader_db
     restart: always
-    env_file: ./app/.env
-    network_mode: "host" # Contabo ulanishi uchun 5432 porti ochiq bo'lishi kerak
+    env_file:
+      - ./app/.env
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data
+    network_mode: "host"
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+
+  # admin_panel:
+  #   build: .
+  #   container_name: downloader_admin
+  #   restart: always
+  #   command: uvicorn admin_panel:app --host 0.0.0.0 --port 8000
+  #   volumes:
+  #     - .:/app
+  #     - /dev/shm:/dev/shm
+  #   env_file:
+  #     - ./app/.env
+  #   network_mode: "host"
+  #   depends_on:
+  #     - postgres
+  #   environment:
+  #     - DATABASE_URL=postgresql://postgres:postgres_pass@127.0.0.1:5432/downloader_db
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 300M
 
   downloader-bot:
     build: .
-    container_name: tg_bot_gateway
+    container_name: ${CONTAINER_NAME}
     restart: always
     network_mode: "host"
+    depends_on:
+      - redis
+      - postgres
+    deploy:
+      resources:
+        limits:
+          # CPU ni 1.5 qilib qo'yamiz, tizimga 0.5 yadro kalsin
+          cpus: '1.5'
+          # RAM ni 800MB ga tushiramiz, qolganini Swap hal qiladi
+          memory: 800M 
+        reservations:
+          cpus: '0.3'
+          memory: 256M
+    volumes:
+      - .:/app
+      - /dev/shm:/dev/shm
+      - telegram_bot_api_data:/var/lib/telegram-bot-api
+    env_file:
+      - ./app/.env
     environment:
-      - REDIS_HOST=127.0.0.1
-      # Bu yerda CONTABO_IP_MANZILI ni o'rniga haqiqiy IP ni yozing
-      - CELERY_BROKER_URL=amqp://admin:password@164.68.103.67:5672// 
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=127.0.0.1 
+      - REDIS_PORT=6379
+      - DB_HOST=127.0.0.1
+      # TEMP_DIR ni to'g'riladik (shmsh dagi 'sh' olib tashlandi)
+      - TEMP_DIR=/dev/shm 
+      - CELERY_BROKER_URL=amqp://admin:password@127.0.0.1:5672//
       - CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1 
-    env_file: ./app/.env
+    ulimits:
+      nofile:
+        soft: 65535  
+        hard: 65535
+
+  worker:
+    build: .
+    container_name: downloader_worker
+    restart: always
+    network_mode: "host"
+    depends_on:
+      - redis
+      - postgres
+      - rabbitmq
+    deploy:
+      resources:
+        limits:
+          # Workerlarga ko'proq resurs ajratamiz (ffmpeg uchun)
+          cpus: '2.0'
+          memory: 1024M
+    volumes:
+      - .:/app
+      - /dev/shm:/dev/shm
+    env_file:
+      - ./app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HELP=1
+      - CELERY_BROKER_URL=amqp://admin:password@127.0.0.1:5672//
+      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1
+    command: celery -A tasks.celery_app worker --loglevel=info --concurrency=4
+
 
   telegram-bot-api:
     image: aiogram/telegram-bot-api:latest
     container_name: telegram_bot_api
+    restart: always
     network_mode: "host"
-    command: --local --dir /var/lib/telegram-bot-api --temp-dir /dev/shm
+    environment:
+      - TELEGRAM_API_ID=32927219
+      - TELEGRAM_API_HASH=357ba58b52b8970387a61fa400c55544
+      - TELEGRAM_LOCAL=true
+      - TELEGRAM_STAT=true
+    volumes:
+      - telegram_bot_api_data:/var/lib/telegram-bot-api
+      - /dev/shm:/dev/shm
+    # Beget-da 2 yadro bo'lgani uchun ishchi oqimlar sonini 4 taga cheklaymiz
+    command: --local --dir /var/lib/telegram-bot-api --temp-dir /dev/shm --max-webhook-connections 50 --working-threads 4
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: downloader_rabbitmq
+    network_mode: "host"
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=password
+      # RAM 300MB dan oshsa, RabbitMQ xabarlarni diskka o'tkazadi
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbit vm_memory_high_watermark {absolute,314572800}
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+
+volumes:
+  redis_data:
+  postgres_data:
+  telegram_bot_api_data:
