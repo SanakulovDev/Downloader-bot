@@ -32,9 +32,11 @@ COMMON_OPTS = {
     # Aria2c Configuration
     'external_downloader': 'aria2c',
     'external_downloader_args': [
-        '--max-connection-per-server=5', # 16 dan 5 ga tushirildi
-        '--split=5',
-        '--min-split-size=1M',
+        '--max-connection-per-server=16', # Har bir serverga ulanishlar soni
+        '--split=16',                    # Faylni 16 bo'lakka bo'lib yuklash
+        '--min-split-size=1M',           # Minimal bo'lak hajmi
+        '--max-overall-download-limit=0',# Tezlikni cheklamaslik
+        '--file-allocation=none',        # Diskda joy band qilishni o'chirish (tezlatadi)
     ],
     # RAM tejash uchun buffer o'lchami
     'buffersize': 1024 * 16, # 16KB buffer
