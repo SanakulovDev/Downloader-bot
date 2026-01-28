@@ -19,20 +19,21 @@ YTDLP_DOWNLOAD_TIMEOUT = 900  # seconds
 
 class _YtDlpLogger:
     def debug(self, msg):
-        pass
+        if not msg.startswith('[debug] '):
+            logger.debug(f"[yt-dlp] {msg}")
 
     def info(self, msg):
-        pass
+        logger.info(f"[yt-dlp] {msg}")
 
     def warning(self, msg):
         if "Requested format is not available" in str(msg):
             return
-        logger.warning(msg)
+        logger.warning(f"[yt-dlp] {msg}")
 
     def error(self, msg):
         if "Requested format is not available" in str(msg):
             return
-        logger.error(msg)
+        logger.error(f"[yt-dlp] {msg}")
 
 _COOKIE_FILE = os.getenv("YTDLP_COOKIE_FILE")
 
@@ -45,6 +46,7 @@ COMMON_OPTS = {
     'no_warnings': True,
     'ignoreerrors': False,
     'nocheckcertificate': True,
+    'remote_components': ['ejs:github'],
     # Aria2c Configuration
     'external_downloader': 'aria2c',
     'external_downloader_args': [
@@ -71,9 +73,9 @@ COMMON_OPTS = {
 TARGET_HEIGHTS = {144, 240, 360, 480, 720, 1080, 1440, 2160}
 MAX_FORMAT_SIZE_BYTES = 900 * 1024 * 1024  # 900MB
 VIDEO_CODEC_PRIORITY = {
-    "av01": 3,
+    "avc1": 3,
     "vp9": 2,
-    "avc1": 1,
+    "av01": 1,
 }
 
 
@@ -551,7 +553,7 @@ async def download_audio(video_id: str, chat_id: int) -> Tuple[Optional[str], Op
 
     ydl_opts = {
         **COMMON_OPTS,
-        'quiet': True,
+        'quiet': False,
         'logger': _YtDlpLogger(),
         'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'outtmpl': str(Path(TMP_DIR) / f"{video_id}.%(ext)s"),
@@ -637,7 +639,7 @@ async def download_video(
                 **COMMON_OPTS,
                 **({'cookiefile': ig_cookie} if ig_cookie else {}),
                 **({'proxy': ig_proxy} if ig_proxy else {}),
-                'quiet': True,
+                'quiet': False,
                 'logger': _YtDlpLogger(),
                 'format': format_selector,
                 'postprocessors': [{
@@ -681,7 +683,7 @@ async def download_video(
 
         ydl_opts = {
             **COMMON_OPTS,
-            'quiet': True,
+            'quiet': False,
             'logger': _YtDlpLogger(),
             'format': format_selector,
             'postprocessors': [{

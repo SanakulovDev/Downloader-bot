@@ -6,9 +6,7 @@ shazamio>=0.5.0
 aiofiles
 asyncpg
 sqlalchemy
-
 ytmusicapi
-celery>=5.3.6
 alembic
 pDOc
 msgpack

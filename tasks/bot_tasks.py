@@ -5,7 +5,6 @@ import time
 from hashlib import sha256
 from typing import Optional
 
-from tasks.celery_app import celery_app
 from utils.download import download_video, download_audio, cache_media_result
 from services.artist_cache import cache_artist_name
 from services.bot_client import create_bot_session
@@ -25,8 +24,7 @@ async def _remove_file_if_exists(path: str) -> None:
         logger.error(f"Failed to remove file: {e}")
 
 
-@celery_app.task(name='tasks.process_video_task')
-def process_video_task(
+async def process_video_task(
     chat_id: int,
     url: str,
     status_message_id: Optional[int] = None,
@@ -40,20 +38,18 @@ def process_video_task(
     lock_key = f"idempotency:video:{chat_id}:{url_hash}"
     if not acquire_lock(lock_key):
         if status_message_id:
-            asyncio.run(_delete_message_only(chat_id, status_message_id))
+            await _delete_message_only(chat_id, status_message_id)
         return
     try:
-        asyncio.run(
-            _process_video_task_async(
-                chat_id,
-                url,
-                status_message_id,
-                format_selector,
-                output_ext,
-                format_label,
-                title,
-                uploader,
-            )
+        await _process_video_task_async(
+            chat_id,
+            url,
+            status_message_id,
+            format_selector,
+            output_ext,
+            format_label,
+            title,
+            uploader,
         )
     finally:
         release_lock(lock_key)
@@ -80,6 +76,7 @@ async def _process_video_task_async(
 
         def progress_hook(data: dict) -> None:
             nonlocal last_update
+            # Only update if downloading and message exists
             if data.get("status") != "downloading" or not status_message_id:
                 return
             now = time.monotonic()
@@ -231,8 +228,7 @@ def _render_progress_bar(percent: int) -> str:
     return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
 
 
-@celery_app.task(name='tasks.process_music_task')
-def process_music_task(
+async def process_music_task(
     chat_id: int,
     video_id: str,
     message_id: int,
@@ -242,10 +238,10 @@ def process_music_task(
     lock_key = f"idempotency:music:{chat_id}:{video_id}"
     if not acquire_lock(lock_key):
         if status_message_id:
-            asyncio.run(_delete_message_only(chat_id, status_message_id))
+            await _delete_message_only(chat_id, status_message_id)
         return
     try:
-        asyncio.run(_process_music_task_async(chat_id, video_id, message_id, is_media, status_message_id))
+        await _process_music_task_async(chat_id, video_id, message_id, is_media, status_message_id)
     finally:
         release_lock(lock_key)
 

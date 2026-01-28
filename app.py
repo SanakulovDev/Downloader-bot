@@ -51,9 +51,9 @@ async def main():
     from utils.cleanup import cleanup_worker
     cleanup_task = asyncio.create_task(cleanup_worker())
 
-    # Start Background Task Worker (Threading) - REMOVED (Replaced by Celery)
-    # from utils.queue_worker import start_worker
-    # start_worker()
+    # Start Task Queue Workers
+    from utils.task_queue import task_queue
+    task_queue.start()
     
     # Register Middleware
     from utils.middlewares.activity import ActivityMiddleware
@@ -76,6 +76,9 @@ async def main():
     # Redis ni yopish
     if loader.redis_client:
         await loader.redis_client.close()
+
+    # Task Queue ni to'xtatish
+    await task_queue.stop()
 
 if __name__ == '__main__':
     try:

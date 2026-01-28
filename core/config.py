@@ -15,8 +15,6 @@ class Settings:
     telegram_nickname: str = os.getenv('TELEGRAM_NICKNAME', '@InstantAudioBot')
     idempotency_ttl_seconds: int = int(os.getenv('IDEMPOTENCY_TTL_SECONDS', '900'))
     artist_cache_ttl_seconds: int = int(os.getenv('ARTIST_CACHE_TTL_SECONDS', '3600'))
-    celery_broker_url: str = os.getenv('CELERY_BROKER_URL', '')
-    celery_result_backend: str = os.getenv('CELERY_RESULT_BACKEND', '')
     use_local_server: bool = os.getenv('USE_LOCAL_SERVER', 'False').lower() == 'true'
     local_server_url: str = os.getenv('TELEGRAM_API_SERVER_URL', 'http://127.0.0.1:8081')
 

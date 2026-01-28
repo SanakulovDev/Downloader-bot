@@ -63,39 +63,12 @@ services:
       - DB_HOST=127.0.0.1
       # TEMP_DIR ni to'g'riladik (shmsh dagi 'sh' olib tashlandi)
       - TEMP_DIR=/dev/shm 
-      - CELERY_BROKER_URL=amqp://admin:password@127.0.0.1:5672//
-      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1 
+      # CELERY settings removed to use Redis defaults (from code fallback)
     ulimits:
       nofile:
         soft: 65535  
         hard: 65535
 
-  worker:
-    build: .
-    container_name: downloader_worker
-    restart: always
-    network_mode: "host"
-    depends_on:
-      - redis
-      - postgres
-      - rabbitmq
-    deploy:
-      resources:
-        limits:
-          # Workerlarga ko'proq resurs ajratamiz (ffmpeg uchun)
-          cpus: '2.0'
-          memory: 1024M
-    volumes:
-      - .:/app
-      - /dev/shm:/dev/shm
-    env_file:
-      - ./app/.env
-    environment:
-      - PYTHONUNBUFFERED=1
-      - HELP=1
-      - CELERY_BROKER_URL=amqp://admin:password@127.0.0.1:5672//
-      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1
-    command: celery -A tasks.celery_app worker --loglevel=info --concurrency=4
 
 
   telegram-bot-api:
@@ -117,19 +90,6 @@ services:
       resources:
         limits:
           memory: 300M
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: downloader_rabbitmq
-    network_mode: "host"
-    environment:
-      - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=password
-      # RAM 300MB dan oshsa, RabbitMQ xabarlarni diskka o'tkazadi
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbit vm_memory_high_watermark {absolute,314572800}
-    deploy:
-      resources:
-        limits:
-          memory: 400M
 
 volumes:
   redis_data:

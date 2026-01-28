@@ -13,6 +13,7 @@ from states.bot_states import BotStates
 from keyboards.default_keyboards import main_menu
 from utils.validation import is_youtube_url, is_instagram_url, extract_url, extract_youtube_id
 from tasks.bot_tasks import process_video_task
+from utils.task_queue import task_queue
 from utils.search import search_music
 from utils.download import fetch_youtube_formats_fast, get_format_selector
 from utils.telegram_helpers import safe_delete_message, safe_edit_text, check_text_length_and_notify
@@ -230,8 +231,9 @@ async def handle_video_logic(message: Message, url: str):
     #     url=url,
     #     status_message_id=status_msg.message_id
     # )
-    from tasks.bot_tasks import process_video_task
-    process_video_task.delay(
+    # from tasks.bot_tasks import process_video_task
+    await task_queue.add_task(
+        process_video_task,
         chat_id=chat_id,
         url=url,
         status_message_id=status_msg.message_id
@@ -482,8 +484,9 @@ async def handle_video_format(callback: CallbackQuery):
     #     format_selector=format_selector,
     #     output_ext=output_ext
     # )
-    from tasks.bot_tasks import process_video_task
-    process_video_task.delay(
+    # from tasks.bot_tasks import process_video_task
+    await task_queue.add_task(
+        process_video_task,
         chat_id=callback.message.chat.id,
         url=url,
         status_message_id=status_message_id,

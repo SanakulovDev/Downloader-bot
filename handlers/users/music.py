@@ -8,6 +8,7 @@ from loader import dp
 from states.bot_states import BotStates
 from utils.search import search_music
 from tasks.bot_tasks import process_music_task
+from utils.task_queue import task_queue
 from utils.telegram_helpers import safe_delete_message, safe_edit_text, check_text_length_and_notify
 from utils.i18n import get_user_lang, t
 
@@ -312,8 +313,9 @@ async def handle_music_callback(callback: CallbackQuery):
     #     is_media=is_media,
     #     status_message_id=status_msg.message_id if status_msg else None
     # )
-    from tasks.bot_tasks import process_music_task
-    process_music_task.delay(
+    # from tasks.bot_tasks import process_music_task
+    await task_queue.add_task(
+        process_music_task,
         chat_id=callback.message.chat.id,
         video_id=video_id,
         message_id=callback.message.message_id,
